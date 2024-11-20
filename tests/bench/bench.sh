@@ -16,23 +16,25 @@ if [ -n "${QUIET:-}" ]; then
 fi
 
 # Prepare prerequisites.
+bench_file="/tmp/resourcestatemetrics_benchmark.txt"
+rm "$bench_file" || true
 retry_count=0
 max_retries=10
 REALPATH_KUBESTATEMETRICS_CUSTOMRESOURCESTATE_CONFIG=$(realpath "$KUBESTATEMETRICS_CUSTOMRESOURCESTATE_CONFIG")
-date >> /tmp/crdmetrics_benchmark.txt
+date >> "$bench_file"
 function terminate() { # Terminate dangling process in case of a manual interrupt.
   kill -9 "$PID"
   wait "$PID"
 }
 trap terminate SIGINT SIGTERM
 
-# Run CRDMetrics.
-"$KUBECTL" scale deployment "$PROJECT_NAME"-controller --replicas=0 -n "$LOCAL_NAMESPACE" || true
+# Run ResourceStateMetrics.
+"$KUBECTL" scale deployment "$PROJECT_NAME" --replicas=0 -n "$LOCAL_NAMESPACE" || true
 
 # Start the timer.
 TInit=$(gdate +%s%3N)
 
-# Run CRDMetrics.
+# Run ResourceStateMetrics.
 ./"$PROJECT_NAME" --kubeconfig "$KUBECONFIG" &
 PID=$!
 echo -e "[$PID&]"
@@ -62,9 +64,9 @@ wait $PID
 
 # Preserve the time differences.
 # shellcheck disable=SC2129
-echo -e "[CRDMETRICS]" >> /tmp/crdmetrics_benchmark.txt
-echo -e "BUILD:\t$((TTBuild - TInit))ms" >> /tmp/crdmetrics_benchmark.txt
-echo -e "RTT:\t$((TTQuery - TTBuild))ms" >> /tmp/crdmetrics_benchmark.txt
+echo -e "[RESOURCESTATEMETRICS]" >> "$bench_file"
+echo -e "BUILD:\t$((TTBuild - TInit))ms" >> "$bench_file"
+echo -e "RTT:\t$((TTQuery - TTBuild))ms" >> "$bench_file"
 
 # If $KUBESTATEMETRICS_DIR is not set, or points to a non-directory, fail.
 if [ -z "$KUBESTATEMETRICS_DIR" ] || [ ! -d "$KUBESTATEMETRICS_DIR" ]; then
@@ -117,9 +119,9 @@ TTQuery=$(gdate +%s%3N)
 
 # Preserve the time differences.
 # shellcheck disable=SC2129
-echo -e "[KUBESTATEMETRICS]" >> /tmp/crdmetrics_benchmark.txt
-echo -e "BUILD:\t$((TTBuild - TInit))ms" >> /tmp/crdmetrics_benchmark.txt
-echo -e "RTT:\t$((TTQuery - TTBuild))ms" >> /tmp/crdmetrics_benchmark.txt
+echo -e "[CUSTOMRESOURCESTATE]" >> "$bench_file"
+echo -e "BUILD:\t$((TTBuild - TInit))ms" >> "$bench_file"
+echo -e "RTT:\t$((TTQuery - TTBuild))ms" >> "$bench_file"
 
 # Set working directory to original directory.
 cd - || exit 1
@@ -129,4 +131,4 @@ kill -9 $PID
 wait $PID
 
 # Show the benchmark results.
-cat /tmp/crdmetrics_benchmark.txt
+cat "$bench_file"

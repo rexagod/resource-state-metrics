@@ -1,5 +1,5 @@
 /*
-Copyright 2024 The Kubernetes crdmetrics Authors.
+Copyright 2024 The Kubernetes resource-state-metrics Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -58,7 +58,7 @@ func writeMetricTo(writer *strings.Builder, g, v, k, resolvedValue string, resol
 	// Write the metric.
 	if len(resolvedLabelKeys) > 0 {
 		separator := "{"
-		for i := range len(resolvedLabelKeys) {
+		for i := range resolvedLabelKeys {
 			writer.WriteString(separator)
 			writer.WriteString(resolvedLabelKeys[i])
 			writer.WriteString("=\"")

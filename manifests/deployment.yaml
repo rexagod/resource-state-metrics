@@ -1,4 +1,4 @@
-# Copyright 2024 The Kubernetes crdmetrics Authors.
+# Copyright 2024 The Kubernetes resource-state-metrics Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -15,25 +15,25 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: crdmetrics
+  name: resource-state-metrics
   namespace: default
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: crdmetrics
+      app: resource-state-metrics
   template:
     metadata:
       labels:
-        app: crdmetrics
+        app: resource-state-metrics
     spec:
       nodeSelector:
         kubernetes.io/os: linux
       securityContext: {}
-      serviceAccountName: crdmetrics
+      serviceAccountName: resource-state-metrics
       containers:
-      - name: crdmetrics
-        image: "crdmetrics:draft"
+      - name: resource-state-metrics
+        image: "resource-state-metrics:draft"
         ports:
           - containerPort: 8080
         imagePullPolicy: Always

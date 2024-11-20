@@ -1,5 +1,5 @@
 /*
-Copyright 2024 The Kubernetes crdmetrics Authors.
+Copyright 2024 The Kubernetes resource-state-metrics Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -19,22 +19,22 @@ limitations under the License.
 package fake
 
 import (
-	v1alpha1 "github.com/rexagod/crdmetrics/pkg/generated/clientset/versioned/typed/crdmetrics/v1alpha1"
+	v1alpha1 "github.com/rexagod/resource-state-metrics/pkg/generated/clientset/versioned/typed/resourcestatemetrics/v1alpha1"
 	rest "k8s.io/client-go/rest"
 	testing "k8s.io/client-go/testing"
 )
 
-type FakeCrdmetricsV1alpha1 struct {
+type FakeResourceStateMetricsV1alpha1 struct {
 	*testing.Fake
 }
 
-func (c *FakeCrdmetricsV1alpha1) CRDMetricsResources(namespace string) v1alpha1.CRDMetricsResourceInterface {
-	return &FakeCRDMetricsResources{c, namespace}
+func (c *FakeResourceStateMetricsV1alpha1) ResourceMetricsMonitors(namespace string) v1alpha1.ResourceMetricsMonitorInterface {
+	return &FakeResourceMetricsMonitors{c, namespace}
 }
 
 // RESTClient returns a RESTClient that is used to communicate
 // with API server by this client implementation.
-func (c *FakeCrdmetricsV1alpha1) RESTClient() rest.Interface {
+func (c *FakeResourceStateMetricsV1alpha1) RESTClient() rest.Interface {
 	var ret *rest.RESTClient
 	return ret
 }

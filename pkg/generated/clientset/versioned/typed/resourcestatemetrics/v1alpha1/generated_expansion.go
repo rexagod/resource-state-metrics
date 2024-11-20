@@ -1,5 +1,5 @@
 /*
-Copyright 2024 The Kubernetes crdmetrics Authors.
+Copyright 2024 The Kubernetes resource-state-metrics Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -18,4 +18,4 @@ limitations under the License.
 
 package v1alpha1
 
-type CRDMetricsResourceExpansion interface{}
+type ResourceMetricsMonitorExpansion interface{}

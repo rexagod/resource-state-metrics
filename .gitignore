@@ -1,6 +1,6 @@
 # Module paraphernalia
 assets/
-crdmetrics
+resource-state-metrics
 
 # `pprof` artefacts
 ./*.ps

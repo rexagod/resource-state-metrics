@@ -1,6 +1,6 @@
 approvers:
   - sig-instrumentation-approvers
 reviewers:
-  - sig-instrumentation-members
+  - sig-instrumentation-approvers
 labels:
   - sig/instrumentation

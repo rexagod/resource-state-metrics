@@ -1,5 +1,5 @@
 /*
-Copyright 2024 The Kubernetes crdmetrics Authors.
+Copyright 2024 The Kubernetes resource-state-metrics Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -18,12 +18,36 @@ limitations under the License.
 package version
 
 import (
+	"strings"
+
 	"github.com/prometheus/common/version"
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 )
 
-// ControllerName is used in metrics as is, so snake-case is necessary.
-const ControllerName = "crdmetrics"
+// name is an implicit type to allow attaching convenience methods on the controller name.
+// All methods return string values and not `name` to avoid exporting this.
+type name string
 
+// ControllerName is used in metrics as is, so snake-case is necessary.
+var ControllerName name = "resource-state-metrics"
+
+// String returns the controller name as a string.
+func (n name) String() string {
+	return string(n)
+}
+
+// ToPascalCase returns the controller name in PascalCase.
+func (n name) ToPascalCase() string {
+	return strings.ReplaceAll(cases.Title(language.English, cases.NoLower).String(n.String()), "-", "")
+}
+
+// ToSnakeCase returns the controller name in snake_case.
+func (n name) ToSnakeCase() string {
+	return strings.ReplaceAll(strings.ToLower(n.String()), "-", "_")
+}
+
+// Version returns the version metadata of the binary.
 func Version() string {
-	return version.Print(ControllerName)
+	return version.Print(ControllerName.String())
 }

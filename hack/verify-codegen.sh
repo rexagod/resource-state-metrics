@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# Copyright 2024 The Kubernetes crdmetrics Authors.
+# Copyright 2024 The Kubernetes resource-state-metrics Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -33,6 +33,7 @@ mkdir -p "${TMP_DIFFROOT}"
 cp -a "${DIFFROOT}"/* "${TMP_DIFFROOT}"
 
 "${SCRIPT_ROOT}/hack/update-codegen.sh"
+
 echo "diffing ${DIFFROOT} against freshly generated codegen"
 ret=0
 diff -Naupr "${DIFFROOT}" "${TMP_DIFFROOT}" || ret=$?

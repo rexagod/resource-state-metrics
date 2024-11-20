@@ -1,5 +1,5 @@
 /*
-Copyright 2024 The Kubernetes crdmetrics Authors.
+Copyright 2024 The Kubernetes resource-state-metrics Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -31,11 +31,11 @@ import (
 	"github.com/prometheus/client_golang/prometheus/collectors"
 	versioncollector "github.com/prometheus/client_golang/prometheus/collectors/version"
 	"github.com/prometheus/client_golang/prometheus/promauto"
-	"github.com/rexagod/crdmetrics/internal/version"
-	"github.com/rexagod/crdmetrics/pkg/apis/crdmetrics/v1alpha1"
-	clientset "github.com/rexagod/crdmetrics/pkg/generated/clientset/versioned"
-	crdmetricsscheme "github.com/rexagod/crdmetrics/pkg/generated/clientset/versioned/scheme"
-	informers "github.com/rexagod/crdmetrics/pkg/generated/informers/externalversions"
+	"github.com/rexagod/resource-state-metrics/internal/version"
+	"github.com/rexagod/resource-state-metrics/pkg/apis/resourcestatemetrics/v1alpha1"
+	clientset "github.com/rexagod/resource-state-metrics/pkg/generated/clientset/versioned"
+	rsmscheme "github.com/rexagod/resource-state-metrics/pkg/generated/clientset/versioned/scheme"
+	informers "github.com/rexagod/resource-state-metrics/pkg/generated/informers/externalversions"
 	"golang.org/x/time/rate"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -59,14 +59,14 @@ type Controller struct {
 	// kubeclientset is a standard kubernetes clientset, required for native operations.
 	kubeclientset kubernetes.Interface
 
-	// crdmetricsClientset is a clientset for our own API group.
-	crdmetricsClientset clientset.Interface
+	// rsmClientset is a clientset for our own API group.
+	rsmClientset clientset.Interface
 
 	// dynamicClientset is a clientset for CRD operations.
 	dynamicClientset dynamic.Interface
 
-	// crdmetricsInformerFactory is a shared informer factory for managed resources.
-	crdmetricsInformerFactory informers.SharedInformerFactory
+	// rsmInformerFactory is a shared informer factory for managed resources.
+	rsmInformerFactory informers.SharedInformerFactory
 
 	// workqueue is a rate limited work queue. This is used to queue work to be processed instead of performing it as
 	// soon as a change happens. This means we can ensure we only process a fixed amount of resources at a time, and
@@ -76,8 +76,8 @@ type Controller struct {
 	// recorder is an event recorder for recording event resources.
 	recorder record.EventRecorder
 
-	// crdmetricsUIDToStores is the handler's internal stores map. It records all stores associated with a managed resource.
-	crdmetricsUIDToStores map[types.UID][]*StoreType
+	// uidToStores is the handler's internal stores map. It records all stores associated with a managed resource.
+	uidToStores map[types.UID][]*StoreType
 
 	// options is the collection of command-line options.
 	options *Options
@@ -88,13 +88,13 @@ func NewController(
 	ctx context.Context,
 	options *Options,
 	kubeClientset kubernetes.Interface,
-	crdmetricsClientset clientset.Interface,
+	rsmClientset clientset.Interface,
 	dynamicClientset dynamic.Interface,
 ) *Controller {
 	logger := klog.FromContext(ctx)
 
 	// Add native resources to the default Kubernetes Scheme so Events can be logged for them.
-	utilruntime.Must(crdmetricsscheme.AddToScheme(scheme.Scheme))
+	utilruntime.Must(rsmscheme.AddToScheme(scheme.Scheme))
 
 	// Initialize the controller.
 	eventBroadcaster := record.NewBroadcaster()
@@ -104,7 +104,7 @@ func NewController(
 		// Emit events in the default namespace if none is defined.
 		Interface: kubeClientset.CoreV1().Events(os.Getenv("EMIT_NAMESPACE")),
 	})
-	recorder := eventBroadcaster.NewRecorder(scheme.Scheme, corev1.EventSource{Component: version.ControllerName})
+	recorder := eventBroadcaster.NewRecorder(scheme.Scheme, corev1.EventSource{Component: version.ControllerName.String()})
 	ratelimiter := workqueue.NewTypedMaxOfRateLimiter(
 		workqueue.NewTypedItemExponentialFailureRateLimiter[[2]string](5*time.Millisecond, 5*time.Minute),
 		&workqueue.TypedBucketRateLimiter[[2]string]{Limiter:
@@ -118,53 +118,53 @@ func NewController(
 	)
 
 	controller := &Controller{
-		kubeclientset:             kubeClientset,
-		crdmetricsClientset:       crdmetricsClientset,
-		dynamicClientset:          dynamicClientset,
-		crdmetricsInformerFactory: informers.NewSharedInformerFactory(crdmetricsClientset, 0),
-		workqueue:                 workqueue.NewTypedRateLimitingQueue[[2]string](ratelimiter),
-		recorder:                  recorder,
-		options:                   options,
+		kubeclientset:      kubeClientset,
+		rsmClientset:       rsmClientset,
+		dynamicClientset:   dynamicClientset,
+		rsmInformerFactory: informers.NewSharedInformerFactory(rsmClientset, 0),
+		workqueue:          workqueue.NewTypedRateLimitingQueue[[2]string](ratelimiter),
+		recorder:           recorder,
+		options:            options,
 	}
 
 	// Set up event handlers for managed resources.
-	_, err := controller.crdmetricsInformerFactory.Crdmetrics().V1alpha1().CRDMetricsResources().Informer().
+	_, err := controller.rsmInformerFactory.ResourceStateMetrics().V1alpha1().ResourceMetricsMonitors().Informer().
 		AddEventHandler(cache.ResourceEventHandlerFuncs{
 			AddFunc: func(obj interface{}) {
-				controller.enqueueCRDMetrics(obj, addEvent)
+				controller.enqueue(obj, addEvent)
 			},
 			UpdateFunc: func(oldI, newI interface{}) {
-				oldCRDMetrics, ok := oldI.(*v1alpha1.CRDMetricsResource)
+				oldResource, ok := oldI.(*v1alpha1.ResourceMetricsMonitor)
 				if !ok {
-					logger.Error(stderrors.New("failed to cast object to CRDMetricsResource"), "cannot handle event")
+					logger.Error(stderrors.New("failed to cast object to ResourceMetricsMonitor"), "cannot handle event")
 
 					return
 				}
-				newCRDMetrics, ok := newI.(*v1alpha1.CRDMetricsResource)
+				newResource, ok := newI.(*v1alpha1.ResourceMetricsMonitor)
 				if !ok {
-					logger.Error(stderrors.New("failed to cast object to CRDMetricsResource"), "cannot handle event")
+					logger.Error(stderrors.New("failed to cast object to ResourceMetricsMonitor"), "cannot handle event")
 
 					return
 				}
-				if oldCRDMetrics.ResourceVersion == newCRDMetrics.ResourceVersion ||
+				if oldResource.ResourceVersion == newResource.ResourceVersion ||
 
 					// NOTE: Don't add to workqueue if the event stemmed from a status update, else this will create a
 					// reconciliation loop; the resource status update triggers the informer which in turn triggers a
 					// reconciliation (with an update event) which again updates the resource status and so on. This
 					// also applies to other non-spec fields that are updated, such as labels, but those are handled in
 					// the event handler.
-					reflect.DeepEqual(oldCRDMetrics.Spec, newCRDMetrics.Spec) {
-					logger.V(10).Info("Skipping event", "[-old +new]", cmp.Diff(oldCRDMetrics, newCRDMetrics))
+					reflect.DeepEqual(oldResource.Spec, newResource.Spec) {
+					logger.V(10).Info("Skipping event", "[-old +new]", cmp.Diff(oldResource, newResource))
 
 					return
 				}
 
 				// Queue only for `spec` changes.
-				logger.V(4).Info("Update event", "[-old +new]", cmp.Diff(oldCRDMetrics.Spec.Configuration, newCRDMetrics.Spec.Configuration))
-				controller.enqueueCRDMetrics(newI, updateEvent)
+				logger.V(4).Info("Update event", "[-old +new]", cmp.Diff(oldResource.Spec.Configuration, newResource.Spec.Configuration))
+				controller.enqueue(newI, updateEvent)
 			},
 			DeleteFunc: func(obj interface{}) {
-				controller.enqueueCRDMetrics(obj, deleteEvent)
+				controller.enqueue(obj, deleteEvent)
 			},
 		})
 	if err != nil {
@@ -175,8 +175,8 @@ func NewController(
 	return controller
 }
 
-// enqueueCRDMetrics takes a managed resource and converts it into a namespace/name key.
-func (c *Controller) enqueueCRDMetrics(obj interface{}, event eventType) {
+// enqueue takes a managed resource and converts it into a namespace/name key.
+func (c *Controller) enqueue(obj interface{}, event eventType) {
 	var key string
 	var err error
 	if key, err = cache.MetaNamespaceKeyFunc(obj); err != nil {
@@ -198,17 +198,18 @@ func (c *Controller) Run(ctx context.Context, workers int) error {
 	logger.V(4).Info("Waiting for informer caches to sync")
 
 	// Start the informer factories to begin populating the informer caches.
-	c.crdmetricsInformerFactory.Start(ctx.Done())
-	if ok := cache.WaitForCacheSync(ctx.Done(), c.crdmetricsInformerFactory.Crdmetrics().V1alpha1().CRDMetricsResources().Informer().HasSynced); !ok {
+	c.rsmInformerFactory.Start(ctx.Done())
+	informerSynced := c.rsmInformerFactory.ResourceStateMetrics().V1alpha1().ResourceMetricsMonitors().Informer().HasSynced
+	if ok := cache.WaitForCacheSync(ctx.Done(), informerSynced); !ok {
 		return stderrors.New("failed to wait for caches to sync")
 	}
 
 	// Build the telemetry registry.
 	registry := prometheus.NewRegistry()
 	registry.MustRegister(
-		versioncollector.NewCollector(version.ControllerName),
+		versioncollector.NewCollector(version.ControllerName.ToSnakeCase()),
 		collectors.NewGoCollector(),
-		collectors.NewProcessCollector(collectors.ProcessCollectorOpts{Namespace: version.ControllerName, ReportErrors: true}),
+		collectors.NewProcessCollector(collectors.ProcessCollectorOpts{Namespace: version.ControllerName.ToSnakeCase(), ReportErrors: true}),
 	)
 	requestDurationVec := promauto.With(registry).NewHistogramVec(
 		prometheus.HistogramOpts{
@@ -219,7 +220,7 @@ func (c *Controller) Run(ctx context.Context, workers int) error {
 	)
 
 	// Build servers.
-	c.crdmetricsUIDToStores = make(map[types.UID][]*StoreType)
+	c.uidToStores = make(map[types.UID][]*StoreType)
 	selfHost := *c.options.SelfHost
 	selfPort := *c.options.SelfPort
 	selfAddr := net.JoinHostPort(selfHost, strconv.Itoa(selfPort))
@@ -234,7 +235,7 @@ func (c *Controller) Run(ctx context.Context, workers int) error {
 	logger.V(1).Info("Configuring main server", "address", mainAddr)
 	mainInstance := newMainServer(
 		mainAddr,
-		c.crdmetricsUIDToStores,
+		c.uidToStores,
 		requestDurationVec,
 	)
 	main := mainInstance.build(ctx, c.kubeclientset, registry)
@@ -332,14 +333,14 @@ func (c *Controller) syncHandler(ctx context.Context, key string, event string) 
 	}
 
 	// Get the managed resource with this namespace and name.
-	resource, err := c.crdmetricsInformerFactory.Crdmetrics().V1alpha1().CRDMetricsResources().Lister().
-		CRDMetricsResources(namespace).Get(name)
+	resource, err := c.rsmInformerFactory.ResourceStateMetrics().V1alpha1().ResourceMetricsMonitors().Lister().
+		ResourceMetricsMonitors(namespace).Get(name)
 	if err != nil {
 		if !errors.IsNotFound(err) {
-			return fmt.Errorf("error getting CRDMetricsResource %q: %w", klog.KRef(namespace, name), err)
+			return fmt.Errorf("error getting ResourceMetricsMonitor %q: %w", klog.KRef(namespace, name), err)
 		}
 
-		resource = &v1alpha1.CRDMetricsResource{}
+		resource = &v1alpha1.ResourceMetricsMonitor{}
 		resource.SetName(name)
 	}
 
@@ -384,10 +385,10 @@ func (c *Controller) handleObject(ctx context.Context, objectI interface{}, even
 	logger = klog.LoggerWithValues(klog.FromContext(ctx), "key", klog.KObj(object), "event", event)
 	logger.V(1).Info("Processing object")
 	switch o := object.(type) {
-	case *v1alpha1.CRDMetricsResource:
-		handler := newCRDMetricsHandler(c.kubeclientset, c.crdmetricsClientset, c.dynamicClientset)
+	case *v1alpha1.ResourceMetricsMonitor:
+		handler := newHandler(c.kubeclientset, c.rsmClientset, c.dynamicClientset)
 
-		return handler.handleEvent(ctx, c.crdmetricsUIDToStores, event, o, *c.options.TryNoCache)
+		return handler.handleEvent(ctx, c.uidToStores, event, o, *c.options.TryNoCache)
 	default:
 		logger.Error(stderrors.New("unknown object type"), "cannot handle object")
 

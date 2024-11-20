@@ -1,21 +1,21 @@
-# `crdmetrics`: Custom Resource Definition Metrics
+# `resource-state-metrics`
 
-[![CI](https://github.com/rexagod/crdmetrics/actions/workflows/continuous-integration.yaml/badge.svg)](https://github.com/rexagod/crdmetrics/actions/workflows/continuous-integration.yaml) [![Go Report Card](https://goreportcard.com/badge/github.com/rexagod/crdmetrics)](https://goreportcard.com/report/github.com/rexagod/crdmetrics) [![Go Reference](https://pkg.go.dev/badge/github.com/rexagod/crdmetrics.svg)](https://pkg.go.dev/github.com/rexagod/crdmetrics)
+[![CI](https://github.com/rexagod/resource-state-metrics/actions/workflows/continuous-integration.yaml/badge.svg)](https://github.com/rexagod/resource-state-metrics/actions/workflows/continuous-integration.yaml) [![Go Report Card](https://goreportcard.com/badge/github.com/rexagod/resource-state-metrics)](https://goreportcard.com/report/github.com/rexagod/resource-state-metrics) [![Go Reference](https://pkg.go.dev/badge/github.com/rexagod/resource-state-metrics.svg)](https://pkg.go.dev/github.com/rexagod/resource-state-metrics)
 
 ## Summary
 
-Custom Resource Definition Metrics (`crdmetrics`) is a Kubernetes controller that builds on Kube-State-Metrics' Custom Resource State's ideology and generates metrics for custom resources based on the configuration specified in its managed resource, `CRDMetricsResource`.
+`resource-state-metrics` is a Kubernetes controller that builds on Kube-State-Metrics' Custom Resource State's ideology and generates metrics for custom resources based on the configuration specified in its managed resource, `ResourceMetricsMonitor`.
 
-The project's [conformance benchmarking](./tests/bench/bench.sh) shows 3x faster RTT for `crdmetrics` as compared to Kube-State-Metrics' Custom Resource Definition Metrics ([f8aa7d9b](https://github.com/kubernetes/kube-state-metrics/commit/f8aa7d9bb9d8e29876e19f4859391a54a7e61d63)) feature-set:
+The project's [conformance benchmarking](./tests/bench/bench.sh) shows 3x faster RTT for `resource-state-metrics` as compared to Kube-State-Metrics' Custom Resource Definition Metrics ([ea5826a](https://github.com/kubernetes/kube-state-metrics/commit/ea5826a92cde206fc6784d2cb6b7c2548d2b2290)) feature-set:
 
 ```
-Tue Aug 20 21:18:58 IST 2024
-[CRDMETRICS]
-BUILD:  1021ms
-RTT:    1044ms
-[KUBESTATEMETRICS]
-BUILD:  1042ms
-RTT:    3122ms
+Thu Nov 21 05:06:09 IST 2024
+[RESOURCESTATEMETRICS]
+BUILD:	1059ms
+RTT:	1107ms
+[CUSTOMRESOURCESTATE]
+BUILD:	1116ms
+RTT:	3196ms
 ```
 
 ## Development
@@ -46,10 +46,11 @@ In the order of priority:
 - [X] Benchmark(s) for Kube-State-Metrics' [Custom Resource State API](https://github.com/kubernetes/kube-state-metrics/blob/main/docs/metrics/extend/customresourcestate-metrics.md#multiple-metricskitchen-sink).
 - [X] E2E tests covering the controller's basic functionality.
 - [X] `s/CRSM/CRDMetrics`.
-- [X] [Graduate to ALPHA](https://github.com/kubernetes/enhancements/issues/4785), i.e., draft out a KEP.
-- [ ] Make `CRDMetricsResource` namespaced-scope. This allows for:
+- [X] [Draft out a KEP](https://github.com/kubernetes/enhancements/issues/4785).
+- [ ] `s/CRDMetrics/ResourceStateMetrics`.
+- [ ] Make `ResourceMetricsMonitor` namespaced-scope. This allows for:
   - per-namespace configuration (separate configurations between teams), and,
   - garbage collection, since currently the namespace-scoped deployment manages its cluster-scoped resources, which are not garbage collect-able in Kubernetes by design.
-- [ ] Meta-metrics for metric generation failures.
+- [ ] Meta-metrics for metric generation failures. Also, traces?
 
 ###### [License](./LICENSE)

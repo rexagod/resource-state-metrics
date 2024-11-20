@@ -6,7 +6,7 @@ metadata:
   labels:
     foo: "1"
     bar: "2"
-    job: "crdmetrics"
+    job: "resource-state-metrics"
   annotations:
     id: "1000"
 spec:

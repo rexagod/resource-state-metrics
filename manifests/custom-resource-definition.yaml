@@ -1,4 +1,4 @@
-# Copyright 2024 The Kubernetes crdmetrics Authors.
+# Copyright 2024 The Kubernetes resource-state-metrics Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,23 +16,23 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.16.1
-  name: crdmetricsresources.crdmetrics.instrumentation.k8s-sigs.io
+    controller-gen.kubebuilder.io/version: v0.16.5
+  name: resourcemetricsmonitors.resource-state-metrics.instrumentation.k8s-sigs.io
 spec:
-  group: crdmetrics.instrumentation.k8s-sigs.io
+  group: resource-state-metrics.instrumentation.k8s-sigs.io
   names:
-    kind: CRDMetricsResource
-    listKind: CRDMetricsResourceList
-    plural: crdmetricsresources
+    kind: ResourceMetricsMonitor
+    listKind: ResourceMetricsMonitorList
+    plural: resourcemetricsmonitors
     shortNames:
-    - crdmr
-    singular: crdmetricsresource
+    - rmm
+    singular: resourcemetricsmonitor
   scope: Cluster
   versions:
   - name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: CRDMetricsResource is a specification for a CRDMetricsResource
+        description: ResourceMetricsMonitor is a specification for a ResourceMetricsMonitor
           resource.
         properties:
           apiVersion:
@@ -53,11 +53,11 @@ spec:
           metadata:
             type: object
           spec:
-            description: CRDMetricsResourceSpec is the spec for a CRDMetricsResource
+            description: ResourceMetricsMonitorSpec is the spec for a ResourceMetricsMonitor
               resource.
             properties:
               configuration:
-                description: Configuration is the crdmetrics configuration that generates
+                description: Configuration is the RSM configuration that generates
                   metrics.
                 format: string
                 type: string
@@ -65,7 +65,7 @@ spec:
             - configuration
             type: object
           status:
-            description: CRDMetricsResourceStatus is the status for a CRDMetricsResource
+            description: ResourceMetricsMonitorStatus is the status for a ResourceMetricsMonitor
               resource.
             properties:
               conditions:

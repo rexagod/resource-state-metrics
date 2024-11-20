@@ -4,8 +4,8 @@ run:
 
 issues:
   exclude-files:
-    - pkg/apis/crdmetrics/register.go
-    - pkg/apis/crdmetrics/v1alpha1/register.go
+    - pkg/apis/resourcestatemetrics/register.go
+    - pkg/apis/resourcestatemetrics/v1alpha1/register.go
   exclude-rules:
     - path: _test\.go
       linters:

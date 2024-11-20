@@ -1,4 +1,4 @@
-# Copyright 2024 The Kubernetes crdmetrics Authors.
+# Copyright 2024 The Kubernetes resource-state-metrics Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,8 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 ---
-apiVersion: crdmetrics.instrumentation.k8s-sigs.io/v1alpha1
-kind: CRDMetricsResource
+apiVersion: resource-state-metrics.instrumentation.k8s-sigs.io/v1alpha1
+kind: ResourceMetricsMonitor
 metadata:
   name: prefilled
   namespace: default

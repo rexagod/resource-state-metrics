@@ -1,5 +1,5 @@
 /*
-Copyright 2024 The Kubernetes crdmetrics Authors.
+Copyright 2024 The Kubernetes resource-state-metrics Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -21,7 +21,7 @@ package externalversions
 import (
 	"fmt"
 
-	v1alpha1 "github.com/rexagod/crdmetrics/pkg/apis/crdmetrics/v1alpha1"
+	v1alpha1 "github.com/rexagod/resource-state-metrics/pkg/apis/resourcestatemetrics/v1alpha1"
 	schema "k8s.io/apimachinery/pkg/runtime/schema"
 	cache "k8s.io/client-go/tools/cache"
 )
@@ -52,9 +52,9 @@ func (f *genericInformer) Lister() cache.GenericLister {
 // TODO extend this to unknown resources with a client pool
 func (f *sharedInformerFactory) ForResource(resource schema.GroupVersionResource) (GenericInformer, error) {
 	switch resource {
-	// Group=crdmetrics.instrumentation.k8s-sigs.io, Version=v1alpha1
-	case v1alpha1.SchemeGroupVersion.WithResource("crdmetricsresources"):
-		return &genericInformer{resource: resource.GroupResource(), informer: f.Crdmetrics().V1alpha1().CRDMetricsResources().Informer()}, nil
+	// Group=resource-state-metrics.instrumentation.k8s-sigs.io, Version=v1alpha1
+	case v1alpha1.SchemeGroupVersion.WithResource("resourcemetricsmonitors"):
+		return &genericInformer{resource: resource.GroupResource(), informer: f.ResourceStateMetrics().V1alpha1().ResourceMetricsMonitors().Informer()}, nil
 
 	}
 

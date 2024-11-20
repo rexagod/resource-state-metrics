@@ -1,5 +1,5 @@
 /*
-Copyright 2024 The Kubernetes crdmetrics Authors.
+Copyright 2024 The Kubernetes resource-state-metrics Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -19,9 +19,9 @@ limitations under the License.
 package fake
 
 import (
-	clientset "github.com/rexagod/crdmetrics/pkg/generated/clientset/versioned"
-	crdmetricsv1alpha1 "github.com/rexagod/crdmetrics/pkg/generated/clientset/versioned/typed/crdmetrics/v1alpha1"
-	fakecrdmetricsv1alpha1 "github.com/rexagod/crdmetrics/pkg/generated/clientset/versioned/typed/crdmetrics/v1alpha1/fake"
+	clientset "github.com/rexagod/resource-state-metrics/pkg/generated/clientset/versioned"
+	resourcestatemetricsv1alpha1 "github.com/rexagod/resource-state-metrics/pkg/generated/clientset/versioned/typed/resourcestatemetrics/v1alpha1"
+	fakeresourcestatemetricsv1alpha1 "github.com/rexagod/resource-state-metrics/pkg/generated/clientset/versioned/typed/resourcestatemetrics/v1alpha1/fake"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/discovery"
@@ -83,7 +83,7 @@ var (
 	_ testing.FakeClient  = &Clientset{}
 )
 
-// CrdmetricsV1alpha1 retrieves the CrdmetricsV1alpha1Client
-func (c *Clientset) CrdmetricsV1alpha1() crdmetricsv1alpha1.CrdmetricsV1alpha1Interface {
-	return &fakecrdmetricsv1alpha1.FakeCrdmetricsV1alpha1{Fake: &c.Fake}
+// ResourceStateMetricsV1alpha1 retrieves the ResourceStateMetricsV1alpha1Client
+func (c *Clientset) ResourceStateMetricsV1alpha1() resourcestatemetricsv1alpha1.ResourceStateMetricsV1alpha1Interface {
+	return &fakeresourcestatemetricsv1alpha1.FakeResourceStateMetricsV1alpha1{Fake: &c.Fake}
 }

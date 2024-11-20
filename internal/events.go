@@ -1,5 +1,5 @@
 /*
-Copyright 2024 The Kubernetes crdmetrics Authors.
+Copyright 2024 The Kubernetes resource-state-metrics Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -21,12 +21,11 @@ import (
 	stderrors "errors"
 	"fmt"
 	"regexp"
-	"strings"
 	"time"
 
-	"github.com/rexagod/crdmetrics/internal/version"
-	"github.com/rexagod/crdmetrics/pkg/apis/crdmetrics/v1alpha1"
-	clientset "github.com/rexagod/crdmetrics/pkg/generated/clientset/versioned"
+	"github.com/rexagod/resource-state-metrics/internal/version"
+	"github.com/rexagod/resource-state-metrics/pkg/apis/resourcestatemetrics/v1alpha1"
+	clientset "github.com/rexagod/resource-state-metrics/pkg/generated/clientset/versioned"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -49,36 +48,36 @@ func (e eventType) String() string {
 	return []string{"addEvent", "updateEvent", "deleteEvent"}[e]
 }
 
-// crdmetricsHandler knows how to handle resource events.
-type crdmetricsHandler struct {
+// handler knows how to handle resource events.
+type handler struct {
 
 	// kubeClientset is the clientset used to interact with the Kubernetes API.
 	kubeClientset kubernetes.Interface
 
-	// crdmetricsClientset is the clientset used to update the status of the managed resource.
-	crdmetricsClientset clientset.Interface
+	// rsmClientset is the clientset used to update the status of the managed resource.
+	rsmClientset clientset.Interface
 
 	// dynamicClientset is the dynamic clientset used to build stores for different objects.
 	dynamicClientset dynamic.Interface
 }
 
-// newCRDMetricsHandler creates a new crdmetricsHandler.
-func newCRDMetricsHandler(
+// newHandler creates a new handler.
+func newHandler(
 	kubeClientset kubernetes.Interface,
-	crdmetricsClientset clientset.Interface,
+	rsmClientset clientset.Interface,
 	dynamicClientset dynamic.Interface,
-) *crdmetricsHandler {
-	return &crdmetricsHandler{
-		kubeClientset:       kubeClientset,
-		crdmetricsClientset: crdmetricsClientset,
-		dynamicClientset:    dynamicClientset,
+) *handler {
+	return &handler{
+		kubeClientset:    kubeClientset,
+		rsmClientset:     rsmClientset,
+		dynamicClientset: dynamicClientset,
 	}
 }
 
 // HandleEvent handles events received from the informer.
-func (h *crdmetricsHandler) handleEvent(
+func (h *handler) handleEvent(
 	ctx context.Context,
-	crdmetricsUIDToStoresMap map[types.UID][]*StoreType,
+	uidToStoresMap map[types.UID][]*StoreType,
 	event string,
 	o metav1.Object,
 	tryNoCache bool,
@@ -86,7 +85,7 @@ func (h *crdmetricsHandler) handleEvent(
 	logger := klog.FromContext(ctx)
 
 	// Resolve the object type.
-	resource, ok := o.(*v1alpha1.CRDMetricsResource)
+	resource, ok := o.(*v1alpha1.ResourceMetricsMonitor)
 	if !ok {
 		logger.Error(fmt.Errorf("failed to cast object to %s", resource.GetObjectKind()), "cannot handle event")
 
@@ -124,9 +123,9 @@ func (h *crdmetricsHandler) handleEvent(
 	// dropStores drops associated stores between resource changes.
 	dropStores := func() {
 		resourceUID := resource.GetUID()
-		if _, ok = crdmetricsUIDToStoresMap[resourceUID]; ok {
+		if _, ok = uidToStoresMap[resourceUID]; ok {
 			// The associated stores are only reachable through the map. Deleting them will trigger the GC.
-			delete(crdmetricsUIDToStoresMap, resourceUID)
+			delete(uidToStoresMap, resourceUID)
 		}
 	}
 
@@ -142,7 +141,7 @@ func (h *crdmetricsHandler) handleEvent(
 
 			return nil
 		}
-		configurerInstance.build(ctx, crdmetricsUIDToStoresMap, tryNoCache)
+		configurerInstance.build(ctx, uidToStoresMap, tryNoCache)
 
 	// Drop all associated stores.
 	case deleteEvent.String():
@@ -168,15 +167,15 @@ func (h *crdmetricsHandler) handleEvent(
 }
 
 // emitSuccessOnResource emits a success condition on the given resource.
-func (h *crdmetricsHandler) emitSuccessOnResource(
+func (h *handler) emitSuccessOnResource(
 	ctx context.Context,
-	gotResource *v1alpha1.CRDMetricsResource,
+	gotResource *v1alpha1.ResourceMetricsMonitor,
 	conditionBool metav1.ConditionStatus,
 	message string,
-) (*v1alpha1.CRDMetricsResource, error) {
+) (*v1alpha1.ResourceMetricsMonitor, error) {
 	kObj := klog.KObj(gotResource).String()
 
-	resource, err := h.crdmetricsClientset.CrdmetricsV1alpha1().CRDMetricsResources(gotResource.GetNamespace()).
+	resource, err := h.rsmClientset.ResourceStateMetricsV1alpha1().ResourceMetricsMonitors(gotResource.GetNamespace()).
 		Get(ctx, gotResource.GetName(), metav1.GetOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to get %s: %w", kObj, err)
@@ -186,7 +185,7 @@ func (h *crdmetricsHandler) emitSuccessOnResource(
 		Status:  conditionBool,
 		Message: message,
 	})
-	resource, err = h.crdmetricsClientset.CrdmetricsV1alpha1().CRDMetricsResources(resource.GetNamespace()).
+	resource, err = h.rsmClientset.ResourceStateMetricsV1alpha1().ResourceMetricsMonitors(resource.GetNamespace()).
 		UpdateStatus(ctx, resource, metav1.UpdateOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to update the status of %s: %w", kObj, err)
@@ -196,14 +195,14 @@ func (h *crdmetricsHandler) emitSuccessOnResource(
 }
 
 // emitFailureOnResource emits a failure condition on the given resource.
-func (h *crdmetricsHandler) emitFailureOnResource(
+func (h *handler) emitFailureOnResource(
 	ctx context.Context,
-	gotResource *v1alpha1.CRDMetricsResource,
+	gotResource *v1alpha1.ResourceMetricsMonitor,
 	message string,
 ) /* Don't return the most recent resource since this call should always precede an empty return. */ {
 	kObj := klog.KObj(gotResource).String()
 
-	resource, err := h.crdmetricsClientset.CrdmetricsV1alpha1().CRDMetricsResources(gotResource.GetNamespace()).
+	resource, err := h.rsmClientset.ResourceStateMetricsV1alpha1().ResourceMetricsMonitors(gotResource.GetNamespace()).
 		Get(ctx, gotResource.GetName(), metav1.GetOptions{})
 	if err != nil {
 		utilruntime.HandleError(fmt.Errorf("failed to get %s: %w", kObj, err))
@@ -215,7 +214,7 @@ func (h *crdmetricsHandler) emitFailureOnResource(
 		Status:  metav1.ConditionTrue,
 		Message: message,
 	})
-	_, err = h.crdmetricsClientset.CrdmetricsV1alpha1().CRDMetricsResources(resource.GetNamespace()).
+	_, err = h.rsmClientset.ResourceStateMetricsV1alpha1().ResourceMetricsMonitors(resource.GetNamespace()).
 		UpdateStatus(ctx, resource, metav1.UpdateOptions{})
 	if err != nil {
 		utilruntime.HandleError(fmt.Errorf("failed to emit failure on %s: %w", kObj, err))
@@ -225,7 +224,7 @@ func (h *crdmetricsHandler) emitFailureOnResource(
 }
 
 // updateMetadata updates the metadata of the managed resource.
-func (h *crdmetricsHandler) updateMetadata(ctx context.Context, resource *v1alpha1.CRDMetricsResource) error {
+func (h *handler) updateMetadata(ctx context.Context, resource *v1alpha1.ResourceMetricsMonitor) error {
 	logger := klog.FromContext(ctx)
 	kObj := klog.KObj(resource).String()
 
@@ -233,7 +232,7 @@ func (h *crdmetricsHandler) updateMetadata(ctx context.Context, resource *v1alph
 		bool,
 		error,
 	) {
-		gotResource, err := h.crdmetricsClientset.CrdmetricsV1alpha1().CRDMetricsResources(resource.GetNamespace()).
+		gotResource, err := h.rsmClientset.ResourceStateMetricsV1alpha1().ResourceMetricsMonitors(resource.GetNamespace()).
 			Get(ctx, resource.GetName(), metav1.GetOptions{})
 		if err != nil {
 			return false, fmt.Errorf("failed to get %s: %w", kObj, err)
@@ -245,8 +244,7 @@ func (h *crdmetricsHandler) updateMetadata(ctx context.Context, resource *v1alph
 		if resource.Labels == nil {
 			resource.Labels = make(map[string]string)
 		}
-		controllerNameSanitized := strings.ReplaceAll(version.ControllerName, "_", "-")
-		resource.Labels["app.kubernetes.io/managed-by"] = controllerNameSanitized
+		resource.Labels["app.kubernetes.io/managed-by"] = version.ControllerName.String()
 		revisionSHA := regexp.MustCompile(`revision:\s*(\S+)\)`).FindStringSubmatch(version.Version())
 		if len(revisionSHA) > 1 {
 			resource.Labels["app.kubernetes.io/version"] = revisionSHA[1]
@@ -255,7 +253,7 @@ func (h *crdmetricsHandler) updateMetadata(ctx context.Context, resource *v1alph
 		}
 
 		// Compare resource with the fetched resource.
-		resource, err = h.crdmetricsClientset.CrdmetricsV1alpha1().CRDMetricsResources(resource.GetNamespace()).
+		resource, err = h.rsmClientset.ResourceStateMetricsV1alpha1().ResourceMetricsMonitors(resource.GetNamespace()).
 			Update(ctx, resource, metav1.UpdateOptions{})
 		if err != nil {
 			return false, fmt.Errorf("failed to update %s: %w", kObj, err)

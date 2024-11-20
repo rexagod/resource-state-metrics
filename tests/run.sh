@@ -8,13 +8,13 @@ TIMEOUT=${TEST_TIMEOUT:-240}
 # Start the controller in the background with a timeout.
 timeout --signal SIGINT "$TIMEOUT" make setup apply apply-testdata local &
 PID=$!
-echo -e "\n[Running controller in background with PID: $PID.]\n"
+echo -e "\n[Running controller in background with PID: $PID]\n"
 
 # Wait until telemetry is up.
-while ! nc -z localhost "$CRDMETRICS_SELF_PORT"; do sleep 1; done
+while ! nc -z localhost "$RSM_MAIN_PORT"; do sleep 1; done
 
 # Run tests.
-echo -e "\n[Running tests with timeout: $TIMEOUT seconds.]\n"
+echo -e "\n[Running tests with timeout: $TIMEOUT seconds]\n"
 "$GO" test -count=1 -v -timeout "${TIMEOUT}s" -run "$TEST_RUN_PATTERN" -race "$TEST_PKG"
 TEST_EXIT_CODE=$?
 

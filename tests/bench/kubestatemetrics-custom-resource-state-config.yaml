@@ -49,7 +49,7 @@ spec:
               valueFrom: [ replicas ]
           labelsFromPath:
             "name": [ metadata,name ]
-            "CRDMETRICS_dynamicNoResolveShouldRemainTheSame_CompositeUnsupportedUpstreamForUnstructured": [ metadata,labels ]
+            "RSM_dynamicNoResolveShouldRemainTheSame_CompositeUnsupportedUpstreamForUnstructured": [ metadata,labels ]
     - groupVersionKind:
         group: "samplecontroller.k8s.io"
         version: "v1alpha1"

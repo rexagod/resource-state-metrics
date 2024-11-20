@@ -1,4 +1,4 @@
-package crdmetrics_test
+package resourcestatemetrics_test
 
 import (
 	"os"
@@ -6,8 +6,8 @@ import (
 )
 
 const (
-	CRDMetricsMainPort = "CRDMETRICS_MAIN_PORT"
-	CRDMetricsSelfPort = "CRDMETRICS_SELF_PORT"
+	MainPort = "RSM_MAIN_PORT"
+	SelfPort = "RSM_SELF_PORT"
 )
 
 func TestMain(m *testing.M) {

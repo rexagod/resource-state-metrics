@@ -1,5 +1,5 @@
 /*
-Copyright 2024 The Kubernetes crdmetrics Authors.
+Copyright 2024 The Kubernetes resource-state-metrics Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -18,10 +18,10 @@ limitations under the License.
 
 package v1alpha1
 
-// CRDMetricsResourceListerExpansion allows custom methods to be added to
-// CRDMetricsResourceLister.
-type CRDMetricsResourceListerExpansion interface{}
+// ResourceMetricsMonitorListerExpansion allows custom methods to be added to
+// ResourceMetricsMonitorLister.
+type ResourceMetricsMonitorListerExpansion interface{}
 
-// CRDMetricsResourceNamespaceListerExpansion allows custom methods to be added to
-// CRDMetricsResourceNamespaceLister.
-type CRDMetricsResourceNamespaceListerExpansion interface{}
+// ResourceMetricsMonitorNamespaceListerExpansion allows custom methods to be added to
+// ResourceMetricsMonitorNamespaceLister.
+type ResourceMetricsMonitorNamespaceListerExpansion interface{}

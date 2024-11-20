@@ -1,5 +1,5 @@
 /*
-Copyright 2024 The Kubernetes crdmetrics Authors.
+Copyright 2024 The Kubernetes resource-state-metrics Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -21,29 +21,29 @@ package v1alpha1
 import (
 	"net/http"
 
-	v1alpha1 "github.com/rexagod/crdmetrics/pkg/apis/crdmetrics/v1alpha1"
-	"github.com/rexagod/crdmetrics/pkg/generated/clientset/versioned/scheme"
+	v1alpha1 "github.com/rexagod/resource-state-metrics/pkg/apis/resourcestatemetrics/v1alpha1"
+	"github.com/rexagod/resource-state-metrics/pkg/generated/clientset/versioned/scheme"
 	rest "k8s.io/client-go/rest"
 )
 
-type CrdmetricsV1alpha1Interface interface {
+type ResourceStateMetricsV1alpha1Interface interface {
 	RESTClient() rest.Interface
-	CRDMetricsResourcesGetter
+	ResourceMetricsMonitorsGetter
 }
 
-// CrdmetricsV1alpha1Client is used to interact with features provided by the crdmetrics.instrumentation.k8s-sigs.io group.
-type CrdmetricsV1alpha1Client struct {
+// ResourceStateMetricsV1alpha1Client is used to interact with features provided by the resource-state-metrics.instrumentation.k8s-sigs.io group.
+type ResourceStateMetricsV1alpha1Client struct {
 	restClient rest.Interface
 }
 
-func (c *CrdmetricsV1alpha1Client) CRDMetricsResources(namespace string) CRDMetricsResourceInterface {
-	return newCRDMetricsResources(c, namespace)
+func (c *ResourceStateMetricsV1alpha1Client) ResourceMetricsMonitors(namespace string) ResourceMetricsMonitorInterface {
+	return newResourceMetricsMonitors(c, namespace)
 }
 
-// NewForConfig creates a new CrdmetricsV1alpha1Client for the given config.
+// NewForConfig creates a new ResourceStateMetricsV1alpha1Client for the given config.
 // NewForConfig is equivalent to NewForConfigAndClient(c, httpClient),
 // where httpClient was generated with rest.HTTPClientFor(c).
-func NewForConfig(c *rest.Config) (*CrdmetricsV1alpha1Client, error) {
+func NewForConfig(c *rest.Config) (*ResourceStateMetricsV1alpha1Client, error) {
 	config := *c
 	if err := setConfigDefaults(&config); err != nil {
 		return nil, err
@@ -55,9 +55,9 @@ func NewForConfig(c *rest.Config) (*CrdmetricsV1alpha1Client, error) {
 	return NewForConfigAndClient(&config, httpClient)
 }
 
-// NewForConfigAndClient creates a new CrdmetricsV1alpha1Client for the given config and http client.
+// NewForConfigAndClient creates a new ResourceStateMetricsV1alpha1Client for the given config and http client.
 // Note the http client provided takes precedence over the configured transport values.
-func NewForConfigAndClient(c *rest.Config, h *http.Client) (*CrdmetricsV1alpha1Client, error) {
+func NewForConfigAndClient(c *rest.Config, h *http.Client) (*ResourceStateMetricsV1alpha1Client, error) {
 	config := *c
 	if err := setConfigDefaults(&config); err != nil {
 		return nil, err
@@ -66,12 +66,12 @@ func NewForConfigAndClient(c *rest.Config, h *http.Client) (*CrdmetricsV1alpha1C
 	if err != nil {
 		return nil, err
 	}
-	return &CrdmetricsV1alpha1Client{client}, nil
+	return &ResourceStateMetricsV1alpha1Client{client}, nil
 }
 
-// NewForConfigOrDie creates a new CrdmetricsV1alpha1Client for the given config and
+// NewForConfigOrDie creates a new ResourceStateMetricsV1alpha1Client for the given config and
 // panics if there is an error in the config.
-func NewForConfigOrDie(c *rest.Config) *CrdmetricsV1alpha1Client {
+func NewForConfigOrDie(c *rest.Config) *ResourceStateMetricsV1alpha1Client {
 	client, err := NewForConfig(c)
 	if err != nil {
 		panic(err)
@@ -79,9 +79,9 @@ func NewForConfigOrDie(c *rest.Config) *CrdmetricsV1alpha1Client {
 	return client
 }
 
-// New creates a new CrdmetricsV1alpha1Client for the given RESTClient.
-func New(c rest.Interface) *CrdmetricsV1alpha1Client {
-	return &CrdmetricsV1alpha1Client{c}
+// New creates a new ResourceStateMetricsV1alpha1Client for the given RESTClient.
+func New(c rest.Interface) *ResourceStateMetricsV1alpha1Client {
+	return &ResourceStateMetricsV1alpha1Client{c}
 }
 
 func setConfigDefaults(config *rest.Config) error {
@@ -99,7 +99,7 @@ func setConfigDefaults(config *rest.Config) error {
 
 // RESTClient returns a RESTClient that is used to communicate
 // with API server by this client implementation.
-func (c *CrdmetricsV1alpha1Client) RESTClient() rest.Interface {
+func (c *ResourceStateMetricsV1alpha1Client) RESTClient() rest.Interface {
 	if c == nil {
 		return nil
 	}

@@ -1,5 +1,5 @@
 /*
-Copyright 2024 The Kubernetes crdmetrics Authors.
+Copyright 2024 The Kubernetes resource-state-metrics Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -59,34 +59,35 @@ var (
 // +genclient
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 // +kubebuilder:object:root=true
-// +kubebuilder:resource:singular=crdmetricsresource,scope=Cluster,shortName=crdmr
-// +kubebuilder:rbac:groups=crdmetrics.instrumentation.k8s-sigs.io,resources=crdmetricsresources;crdmetricsresources/status,verbs=*
+// +kubebuilder:resource:singular=resourcemetricsmonitor,scope=Cluster,shortName=rmm
+//nolint:lll
+// +kubebuilder:rbac:groups=resource-state-metrics.instrumentation.k8s-sigs.io,resources=resourcemetricsmonitors;resourcemetricsmonitors/status,verbs=*
 // +kubebuilder:subresource:status
 
-// CRDMetricsResource is a specification for a CRDMetricsResource resource.
-type CRDMetricsResource struct {
+// ResourceMetricsMonitor is a specification for a ResourceMetricsMonitor resource.
+type ResourceMetricsMonitor struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
-	Spec              CRDMetricsResourceSpec   `json:"spec"`
-	Status            CRDMetricsResourceStatus `json:"status,omitempty"`
+	Spec              ResourceMetricsMonitorSpec   `json:"spec"`
+	Status            ResourceMetricsMonitorStatus `json:"status,omitempty"`
 }
 
-// CRDMetricsResourceSpec is the spec for a CRDMetricsResource resource.
-type CRDMetricsResourceSpec struct {
+// ResourceMetricsMonitorSpec is the spec for a ResourceMetricsMonitor resource.
+type ResourceMetricsMonitorSpec struct {
 
 	// +kubebuilder:validation:Format=string
 	// +kubebuilder:validation:Required
 	// +required
 
-	// Configuration is the crdmetrics configuration that generates metrics.
+	// Configuration is the RSM configuration that generates metrics.
 	Configuration string `json:"configuration"`
 }
 
 // +kubebuilder:validation:Optional
 // +optional
 
-// CRDMetricsResourceStatus is the status for a CRDMetricsResource resource.
-type CRDMetricsResourceStatus struct {
+// ResourceMetricsMonitorStatus is the status for a ResourceMetricsMonitor resource.
+type ResourceMetricsMonitorStatus struct {
 
 	// +patchMergeKey=type
 	// +patchStrategy=merge
@@ -98,8 +99,8 @@ type CRDMetricsResourceStatus struct {
 }
 
 // Set sets the given condition for the resource.
-func (status *CRDMetricsResourceStatus) Set(
-	resource *CRDMetricsResource,
+func (status *ResourceMetricsMonitorStatus) Set(
+	resource *ResourceMetricsMonitor,
 	condition metav1.Condition,
 ) {
 	// Prefix condition messages with consistent hints.
@@ -136,10 +137,10 @@ func (status *CRDMetricsResourceStatus) Set(
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 // +kubebuilder:object:root=true
 
-// CRDMetricsResourceList is a list of CRDMetricsResource resources.
-type CRDMetricsResourceList struct {
+// ResourceMetricsMonitorList is a list of ResourceMetricsMonitor resources.
+type ResourceMetricsMonitorList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata"`
 
-	Items []CRDMetricsResource `json:"items"`
+	Items []ResourceMetricsMonitor `json:"items"`
 }

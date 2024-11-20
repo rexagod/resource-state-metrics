@@ -1,5 +1,5 @@
 /*
-Copyright 2024 The Kubernetes crdmetrics Authors.
+Copyright 2024 The Kubernetes resource-state-metrics Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -23,9 +23,9 @@ import (
 	sync "sync"
 	time "time"
 
-	versioned "github.com/rexagod/crdmetrics/pkg/generated/clientset/versioned"
-	crdmetrics "github.com/rexagod/crdmetrics/pkg/generated/informers/externalversions/crdmetrics"
-	internalinterfaces "github.com/rexagod/crdmetrics/pkg/generated/informers/externalversions/internalinterfaces"
+	versioned "github.com/rexagod/resource-state-metrics/pkg/generated/clientset/versioned"
+	internalinterfaces "github.com/rexagod/resource-state-metrics/pkg/generated/informers/externalversions/internalinterfaces"
+	resourcestatemetrics "github.com/rexagod/resource-state-metrics/pkg/generated/informers/externalversions/resourcestatemetrics"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 	schema "k8s.io/apimachinery/pkg/runtime/schema"
@@ -254,9 +254,9 @@ type SharedInformerFactory interface {
 	// client.
 	InformerFor(obj runtime.Object, newFunc internalinterfaces.NewInformerFunc) cache.SharedIndexInformer
 
-	Crdmetrics() crdmetrics.Interface
+	ResourceStateMetrics() resourcestatemetrics.Interface
 }
 
-func (f *sharedInformerFactory) Crdmetrics() crdmetrics.Interface {
-	return crdmetrics.New(f, f.namespace, f.tweakListOptions)
+func (f *sharedInformerFactory) ResourceStateMetrics() resourcestatemetrics.Interface {
+	return resourcestatemetrics.New(f, f.namespace, f.tweakListOptions)
 }

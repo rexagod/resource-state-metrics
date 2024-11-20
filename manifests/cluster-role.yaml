@@ -1,4 +1,4 @@
-# Copyright 2024 The Kubernetes crdmetrics Authors.
+# Copyright 2024 The Kubernetes resource-state-metrics Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -15,12 +15,12 @@
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: crdmetrics
+  name: resource-state-metrics
 rules:
 - apiGroups:
-  - crdmetrics.instrumentation.k8s-sigs.io
+  - resource-state-metrics.instrumentation.k8s-sigs.io
   resources:
-  - crdmetricsresources
-  - crdmetricsresources/status
+  - resourcemetricsmonitors
+  - resourcemetricsmonitors/status
   verbs:
   - '*'

@@ -1,5 +1,5 @@
 /*
-Copyright 2024 The Kubernetes crdmetrics Authors.
+Copyright 2024 The Kubernetes resource-state-metrics Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -73,7 +73,7 @@ func (o *Options) Read() {
 			return
 		}
 		name := f.Name
-		overriderForOptionName := `CRDMETRICS_` + strings.ReplaceAll(strings.ToUpper(name), "-", "_")
+		overriderForOptionName := `RSM_` + strings.ReplaceAll(strings.ToUpper(name), "-", "_")
 		if value, ok := os.LookupEnv(overriderForOptionName); ok {
 			o.logger.V(1).Info(fmt.Sprintf("Overriding flag %s with %s=%s", name, overriderForOptionName, value))
 			err := flag.Set(name, value)

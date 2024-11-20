@@ -1,5 +1,5 @@
 /*
-Copyright 2024 The Kubernetes crdmetrics Authors.
+Copyright 2024 The Kubernetes resource-state-metrics Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -20,7 +20,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/rexagod/crdmetrics/pkg/apis/crdmetrics/v1alpha1"
+	"github.com/rexagod/resource-state-metrics/pkg/apis/resourcestatemetrics/v1alpha1"
 	"gopkg.in/yaml.v3"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
@@ -35,7 +35,7 @@ type configure interface {
 	parse(raw string) error
 
 	// build builds the given configuration.
-	build(ctx context.Context, crdmetricsUIDToStoresMap map[types.UID][]*StoreType, tryNoCache bool)
+	build(ctx context.Context, uidToStoresMap map[types.UID][]*StoreType, tryNoCache bool)
 }
 
 // configuration defines the structured representation of a CEL-based YAML configuration.
@@ -53,7 +53,7 @@ type configurer struct {
 	dynamicClientset dynamic.Interface
 
 	// resource is the resource to build stores for.
-	resource *v1alpha1.CRDMetricsResource
+	resource *v1alpha1.ResourceMetricsMonitor
 }
 
 // configurer implements the configure interface.
@@ -62,7 +62,7 @@ var _ configure = &configurer{}
 // newConfigurer returns a new configurer.
 func newConfigurer(
 	dynamicClientset dynamic.Interface,
-	resource *v1alpha1.CRDMetricsResource,
+	resource *v1alpha1.ResourceMetricsMonitor,
 ) *configurer {
 	return &configurer{
 		dynamicClientset: dynamicClientset,
@@ -81,7 +81,7 @@ func (c *configurer) parse(raw string) error {
 }
 
 // build knows how to build the given configuration.
-func (c *configurer) build(ctx context.Context, crdmetricsUIDToStoresMap map[types.UID][]*StoreType, tryNoCache bool) {
+func (c *configurer) build(ctx context.Context, uidToStoresMap map[types.UID][]*StoreType, tryNoCache bool) {
 	for _, storeConfiguration := range c.configuration.Stores {
 		g, v, k, r := storeConfiguration.Group, storeConfiguration.Version, storeConfiguration.Kind, storeConfiguration.ResourceName
 		gvkWithR := gvkr{
@@ -102,6 +102,6 @@ func (c *configurer) build(ctx context.Context, crdmetricsUIDToStoresMap map[typ
 			labelKeys, labelValues,
 		)
 		resourceUID := c.resource.GetUID()
-		crdmetricsUIDToStoresMap[resourceUID] = append(crdmetricsUIDToStoresMap[resourceUID], s)
+		uidToStoresMap[resourceUID] = append(uidToStoresMap[resourceUID], s)
 	}
 }
