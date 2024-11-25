@@ -19,9 +19,8 @@ set -o nounset
 set -o pipefail
 
 SCRIPT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
-CODEGEN_PKG=${CODEGEN_PKG:-$(cd "${SCRIPT_ROOT}"; ls -d -1 ./vendor/k8s.io/code-generator 2>/dev/null || echo ../code-generator)}
 
-source "${CODEGEN_PKG}/kube_codegen.sh"
+source "${SCRIPT_ROOT}/hack/kube_codegen.sh"
 
 THIS_PKG="github.com/rexagod/resource-state-metrics"
 

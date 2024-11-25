@@ -1,6 +1,7 @@
 # Module paraphernalia
 assets/
 resource-state-metrics
+vendor/
 
 # `pprof` artefacts
 ./*.ps
