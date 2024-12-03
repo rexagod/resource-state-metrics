@@ -59,7 +59,7 @@ var (
 // +genclient
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 // +kubebuilder:object:root=true
-// +kubebuilder:resource:singular=resourcemetricsmonitor,scope=Cluster,shortName=rmm
+// +kubebuilder:resource:singular=resourcemetricsmonitor,scope=Namespaced,shortName=rmm
 //nolint:lll
 // +kubebuilder:rbac:groups=resource-state-metrics.instrumentation.k8s-sigs.io,resources=resourcemetricsmonitors;resourcemetricsmonitors/status,verbs=*
 // +kubebuilder:subresource:status

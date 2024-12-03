@@ -19,6 +19,7 @@ metadata:
   namespace: default
 spec:
   # NOTE: "unstructured" is the default resolver.
+  # TODO: Add sample labelKeys and labelValues at the top-level in this example.
   configuration: |-
     stores:
       - g: "contoso.com"

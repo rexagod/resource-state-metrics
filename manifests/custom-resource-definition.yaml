@@ -27,7 +27,7 @@ spec:
     shortNames:
     - rmm
     singular: resourcemetricsmonitor
-  scope: Cluster
+  scope: Namespaced
   versions:
   - name: v1alpha1
     schema:

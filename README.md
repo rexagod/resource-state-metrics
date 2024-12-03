@@ -36,6 +36,8 @@ For more details, take a look at the [Makefile](Makefile) targets.
 - Library support: The module is **never** intended to be used as a library, and as such, does not export any functions or types, with `pkg/` being an exception (for managed types and such).
 - Metrics stability: There are no metrics [stability](https://kubernetes.io/blog/2021/04/23/kubernetes-release-1.21-metrics-stability-ga/) guarantees, as the metrics are user-generated.
 - No middle-ware: The configuration is `unmarshal`led into a set of stores that the codebase directly operates on. There is no middle-ware that processes the configuration before it is used, in order to avoid unnecessary complexity. However, the expression(s) within the `value` and `labelValues` may need to be evaluated before being used, and as such, are exceptions.
+- The managed resource, `ResourceMetricsMonitor` is namespace-scoped, but, to keep in accordance with KSM's `CustomResourceState`, which allows for collecting metrics from cluster-wide resources, it is possible to omit any `field` or `label` selectors to achieve that result. Similarly, to isolate metrics between namespaces (or teams), the selectors may be levied, and a utility such as [`prom-label-proxy`](https://github.com/prometheus-community/prom-label-proxy) to enforce selective namespace(s) or custom label(s).
+  - Enforce namespaced-collection behind a flag (for cluster admins)?
 
 ## TODO
 
@@ -47,10 +49,11 @@ In the order of priority:
 - [X] E2E tests covering the controller's basic functionality.
 - [X] `s/CRSM/CRDMetrics`.
 - [X] [Draft out a KEP](https://github.com/kubernetes/enhancements/issues/4785).
-- [ ] `s/CRDMetrics/ResourceStateMetrics`.
-- [ ] Make `ResourceMetricsMonitor` namespaced-scope. This allows for:
-  - per-namespace configuration (separate configurations between teams), and,
-  - garbage collection, since currently the namespace-scoped deployment manages its cluster-scoped resources, which are not garbage collect-able in Kubernetes by design.
+- [X] `s/CRDMetrics/ResourceStateMetrics`.
+- [X] Make `ResourceMetricsMonitor` namespaced-scope. This allows for:
+  - [X] per-namespace configuration (separate configurations between teams), and,
+  - [ ] garbage collection (without finalizers), since currently the namespace-scoped deployment manages its cluster-scoped resources.
 - [ ] Meta-metrics for metric generation failures. Also, traces?
+- [ ] Dynamic admission control for `ResourceMetricsMonitor` CRD.
 
 ###### [License](./LICENSE)
