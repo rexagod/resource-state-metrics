@@ -155,8 +155,16 @@ local: vet manifests codegen $(PROJECT_NAME)
 pprof:
 	@go tool pprof ":$(PPROF_PORT)" $(PPROF_OPTIONS)
 
-.PHONY: test
-test:
+.PHONY: test_unit
+test_unit:
+	@$(GO) test -race -short $(shell go list ./... | \
+		grep -v "/generated" | \
+		grep -v "/signals" | \
+		grep -v "/tests" | \
+		grep -v "/version")
+
+.PHONY: test_e2e
+test_e2e:
 	@\
 	RSM_SELF_PORT=8887 \
 	RSM_MAIN_PORT=8888 \
@@ -165,6 +173,9 @@ test:
 	TEST_RUN_PATTERN=$(TEST_RUN_PATTERN) \
 	TEST_TIMEOUT=$(TEST_TIMEOUT) \
 	timeout --signal SIGINT --preserve-status $(TEST_TIMEOUT) ./tests/run.sh
+
+.PHONY: test
+test: test_unit test_e2e
 
 .PHONY: bench
 bench: vet setup manifests codegen build apply apply-testdata

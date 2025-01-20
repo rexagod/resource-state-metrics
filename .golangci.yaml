@@ -13,11 +13,13 @@ issues:
 
 linters:
   disable:
+    - dupl
     - err113
     - exhaustruct
     - gochecknoglobals
     - ireturn
     - mnd
+    - testpackage
     - wsl
   presets:
     - bugs

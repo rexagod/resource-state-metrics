@@ -38,7 +38,7 @@ func SetupSignalHandler() context.Context {
 		<-c
 		cancel()
 		<-c
-		os.Exit(1) // Second signal. Exit directly.
+		os.Exit(1) // Second signal. Exit immediately.
 	}()
 
 	return ctx

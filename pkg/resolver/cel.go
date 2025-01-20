@@ -121,25 +121,29 @@ func (cr *CELResolver) Resolve(query string, unstructuredObjectMap map[string]in
 	}
 	logger.V(4).Info("CEL query runtime cost")
 
-	m := map[string]string{}
+	mapper := map[string]string{}
 	switch out.Type() {
 	case types.BoolType, types.DoubleType, types.IntType, types.StringType, types.UintType:
 
 		// If the output is a primitive type, return the query and the resolved value.
-		m = map[string]string{query: fmt.Sprintf("%v", out.Value())}
+		mapper = map[string]string{query: fmt.Sprintf("%v", out.Value())}
 	case types.MapType:
-		m = cr.resolveMap(&out)
+		mapper = cr.resolveMap(&out)
 	case types.ListType:
-		m = cr.resolveList(&out)
+		mapper = cr.resolveList(&out)
+	case types.NullType:
+		// The `unstructured.NestedFieldNoCopy` function returns "<nil>" for nil values.
+		// Hence, we do this for conformance between different resolvers.
+		mapper = map[string]string{query: "<nil>"}
 	default:
 		logger.Error(fmt.Errorf("unsupported output type %q", out.Type()), "ignoring resolution for query")
 	}
 
-	if m == nil {
-		m = map[string]string{query: query}
+	if len(mapper) == 0 {
+		mapper = map[string]string{query: query}
 	}
 
-	return m
+	return mapper
 }
 
 func (cr *CELResolver) resolveList(out *ref.Val) map[string]string {

@@ -110,7 +110,7 @@ func (s *selfServer) build(ctx context.Context, client kubernetes.Interface, gat
 
 	// Handle the readyz path.
 	readyzProber := newReadyz(s.source)
-	mux.Handle(readyzProber.getAsString(), readyzProber.probe(ctx, logger, client))
+	mux.Handle(readyzProber.text(), readyzProber.probe(ctx, logger, client))
 
 	return &http.Server{
 		ErrorLog:          log.New(os.Stdout, s.source, log.LstdFlags|log.Lshortfile),
@@ -149,11 +149,11 @@ func (s *mainServer) build(ctx context.Context, client kubernetes.Interface, _ p
 
 	// Handle the healthz path.
 	healthzProber := newHealthz(s.source)
-	mux.Handle(healthzProber.getAsString(), healthzProber.probe(ctx, logger, client))
+	mux.Handle(healthzProber.text(), healthzProber.probe(ctx, logger, client))
 
 	// Handle the livez path.
 	livezProber := newLivez(s.source)
-	mux.Handle(livezProber.getAsString(), livezProber.probe(ctx, logger, client))
+	mux.Handle(livezProber.text(), livezProber.probe(ctx, logger, client))
 
 	return &http.Server{
 		ErrorLog:          log.New(os.Stdout, s.source, log.LstdFlags|log.Lshortfile),

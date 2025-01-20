@@ -17,8 +17,6 @@ limitations under the License.
 package v1alpha1
 
 import (
-	"fmt"
-
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/strings/slices"
 )
@@ -116,7 +114,7 @@ func (status *ResourceMetricsMonitorStatus) Set(
 
 	// Populate status fields.
 	condition.Reason = reason
-	condition.Message = fmt.Sprintf("%s: %s", message, condition.Message)
+	condition.Message = message
 	condition.LastTransitionTime = metav1.Now()
 	condition.ObservedGeneration = resource.GetGeneration()
 

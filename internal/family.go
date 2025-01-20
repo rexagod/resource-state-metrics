@@ -167,11 +167,11 @@ func (f *FamilyType) resolver(inheritedResolver ResolverType) (resolver.Resolver
 	}
 	switch inheritedResolver {
 	case ResolverTypeNone:
-		fallthrough
-	case ResolverTypeCEL:
-		resolverInstance = resolver.NewCELResolver(f.logger)
+		fallthrough // Default to Unstructured resolver.
 	case ResolverTypeUnstructured:
 		resolverInstance = resolver.NewUnstructuredResolver(f.logger)
+	case ResolverTypeCEL:
+		resolverInstance = resolver.NewCELResolver(f.logger)
 	default:
 		return nil, fmt.Errorf("error resolving metric: unknown resolver %q", inheritedResolver)
 	}
