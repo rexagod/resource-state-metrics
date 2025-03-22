@@ -19,9 +19,9 @@ limitations under the License.
 package v1alpha1
 
 import (
-	"context"
+	context "context"
 
-	v1alpha1 "github.com/rexagod/resource-state-metrics/pkg/apis/resourcestatemetrics/v1alpha1"
+	resourcestatemetricsv1alpha1 "github.com/rexagod/resource-state-metrics/pkg/apis/resourcestatemetrics/v1alpha1"
 	scheme "github.com/rexagod/resource-state-metrics/pkg/generated/clientset/versioned/scheme"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	types "k8s.io/apimachinery/pkg/types"
@@ -37,33 +37,38 @@ type ResourceMetricsMonitorsGetter interface {
 
 // ResourceMetricsMonitorInterface has methods to work with ResourceMetricsMonitor resources.
 type ResourceMetricsMonitorInterface interface {
-	Create(ctx context.Context, resourceMetricsMonitor *v1alpha1.ResourceMetricsMonitor, opts v1.CreateOptions) (*v1alpha1.ResourceMetricsMonitor, error)
-	Update(ctx context.Context, resourceMetricsMonitor *v1alpha1.ResourceMetricsMonitor, opts v1.UpdateOptions) (*v1alpha1.ResourceMetricsMonitor, error)
+	Create(ctx context.Context, resourceMetricsMonitor *resourcestatemetricsv1alpha1.ResourceMetricsMonitor, opts v1.CreateOptions) (*resourcestatemetricsv1alpha1.ResourceMetricsMonitor, error)
+	Update(ctx context.Context, resourceMetricsMonitor *resourcestatemetricsv1alpha1.ResourceMetricsMonitor, opts v1.UpdateOptions) (*resourcestatemetricsv1alpha1.ResourceMetricsMonitor, error)
 	// Add a +genclient:noStatus comment above the type to avoid generating UpdateStatus().
-	UpdateStatus(ctx context.Context, resourceMetricsMonitor *v1alpha1.ResourceMetricsMonitor, opts v1.UpdateOptions) (*v1alpha1.ResourceMetricsMonitor, error)
+	UpdateStatus(ctx context.Context, resourceMetricsMonitor *resourcestatemetricsv1alpha1.ResourceMetricsMonitor, opts v1.UpdateOptions) (*resourcestatemetricsv1alpha1.ResourceMetricsMonitor, error)
 	Delete(ctx context.Context, name string, opts v1.DeleteOptions) error
 	DeleteCollection(ctx context.Context, opts v1.DeleteOptions, listOpts v1.ListOptions) error
-	Get(ctx context.Context, name string, opts v1.GetOptions) (*v1alpha1.ResourceMetricsMonitor, error)
-	List(ctx context.Context, opts v1.ListOptions) (*v1alpha1.ResourceMetricsMonitorList, error)
+	Get(ctx context.Context, name string, opts v1.GetOptions) (*resourcestatemetricsv1alpha1.ResourceMetricsMonitor, error)
+	List(ctx context.Context, opts v1.ListOptions) (*resourcestatemetricsv1alpha1.ResourceMetricsMonitorList, error)
 	Watch(ctx context.Context, opts v1.ListOptions) (watch.Interface, error)
-	Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts v1.PatchOptions, subresources ...string) (result *v1alpha1.ResourceMetricsMonitor, err error)
+	Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts v1.PatchOptions, subresources ...string) (result *resourcestatemetricsv1alpha1.ResourceMetricsMonitor, err error)
 	ResourceMetricsMonitorExpansion
 }
 
 // resourceMetricsMonitors implements ResourceMetricsMonitorInterface
 type resourceMetricsMonitors struct {
-	*gentype.ClientWithList[*v1alpha1.ResourceMetricsMonitor, *v1alpha1.ResourceMetricsMonitorList]
+	*gentype.ClientWithList[*resourcestatemetricsv1alpha1.ResourceMetricsMonitor, *resourcestatemetricsv1alpha1.ResourceMetricsMonitorList]
 }
 
 // newResourceMetricsMonitors returns a ResourceMetricsMonitors
 func newResourceMetricsMonitors(c *ResourceStateMetricsV1alpha1Client, namespace string) *resourceMetricsMonitors {
 	return &resourceMetricsMonitors{
-		gentype.NewClientWithList[*v1alpha1.ResourceMetricsMonitor, *v1alpha1.ResourceMetricsMonitorList](
+		gentype.NewClientWithList[*resourcestatemetricsv1alpha1.ResourceMetricsMonitor, *resourcestatemetricsv1alpha1.ResourceMetricsMonitorList](
 			"resourcemetricsmonitors",
 			c.RESTClient(),
 			scheme.ParameterCodec,
 			namespace,
-			func() *v1alpha1.ResourceMetricsMonitor { return &v1alpha1.ResourceMetricsMonitor{} },
-			func() *v1alpha1.ResourceMetricsMonitorList { return &v1alpha1.ResourceMetricsMonitorList{} }),
+			func() *resourcestatemetricsv1alpha1.ResourceMetricsMonitor {
+				return &resourcestatemetricsv1alpha1.ResourceMetricsMonitor{}
+			},
+			func() *resourcestatemetricsv1alpha1.ResourceMetricsMonitorList {
+				return &resourcestatemetricsv1alpha1.ResourceMetricsMonitorList{}
+			},
+		),
 	}
 }

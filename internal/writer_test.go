@@ -86,7 +86,7 @@ func TestMetricsWriter_writeAllTo(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			w := &bytes.Buffer{}
-			if err := tt.m.writeAllTo(w); err != nil {
+			if err := tt.m.writeStores(w); err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
 			if got := w.String(); got != tt.expected {

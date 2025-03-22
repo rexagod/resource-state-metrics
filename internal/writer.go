@@ -34,10 +34,10 @@ func newMetricsWriter(stores ...*StoreType) *metricsWriter {
 	}
 }
 
-// writeAllTo writes out metrics from the underlying stores to the given writer per resource. It writes metrics so that
+// writeStores writes out metrics from the underlying stores to the given writer per resource. It writes metrics so that
 // the ones with the same name are grouped together when written out, and guarantees an exposition format that is safe
 // to be ingested by Prometheus.
-func (m metricsWriter) writeAllTo(writer io.Writer) error {
+func (m metricsWriter) writeStores(writer io.Writer) error {
 	if len(m.stores) == 0 {
 		return nil
 	}

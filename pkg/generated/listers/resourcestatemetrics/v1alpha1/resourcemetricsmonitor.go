@@ -19,10 +19,10 @@ limitations under the License.
 package v1alpha1
 
 import (
-	v1alpha1 "github.com/rexagod/resource-state-metrics/pkg/apis/resourcestatemetrics/v1alpha1"
-	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/client-go/listers"
-	"k8s.io/client-go/tools/cache"
+	resourcestatemetricsv1alpha1 "github.com/rexagod/resource-state-metrics/pkg/apis/resourcestatemetrics/v1alpha1"
+	labels "k8s.io/apimachinery/pkg/labels"
+	listers "k8s.io/client-go/listers"
+	cache "k8s.io/client-go/tools/cache"
 )
 
 // ResourceMetricsMonitorLister helps list ResourceMetricsMonitors.
@@ -30,7 +30,7 @@ import (
 type ResourceMetricsMonitorLister interface {
 	// List lists all ResourceMetricsMonitors in the indexer.
 	// Objects returned here must be treated as read-only.
-	List(selector labels.Selector) (ret []*v1alpha1.ResourceMetricsMonitor, err error)
+	List(selector labels.Selector) (ret []*resourcestatemetricsv1alpha1.ResourceMetricsMonitor, err error)
 	// ResourceMetricsMonitors returns an object that can list and get ResourceMetricsMonitors.
 	ResourceMetricsMonitors(namespace string) ResourceMetricsMonitorNamespaceLister
 	ResourceMetricsMonitorListerExpansion
@@ -38,17 +38,17 @@ type ResourceMetricsMonitorLister interface {
 
 // resourceMetricsMonitorLister implements the ResourceMetricsMonitorLister interface.
 type resourceMetricsMonitorLister struct {
-	listers.ResourceIndexer[*v1alpha1.ResourceMetricsMonitor]
+	listers.ResourceIndexer[*resourcestatemetricsv1alpha1.ResourceMetricsMonitor]
 }
 
 // NewResourceMetricsMonitorLister returns a new ResourceMetricsMonitorLister.
 func NewResourceMetricsMonitorLister(indexer cache.Indexer) ResourceMetricsMonitorLister {
-	return &resourceMetricsMonitorLister{listers.New[*v1alpha1.ResourceMetricsMonitor](indexer, v1alpha1.Resource("resourcemetricsmonitor"))}
+	return &resourceMetricsMonitorLister{listers.New[*resourcestatemetricsv1alpha1.ResourceMetricsMonitor](indexer, resourcestatemetricsv1alpha1.Resource("resourcemetricsmonitor"))}
 }
 
 // ResourceMetricsMonitors returns an object that can list and get ResourceMetricsMonitors.
 func (s *resourceMetricsMonitorLister) ResourceMetricsMonitors(namespace string) ResourceMetricsMonitorNamespaceLister {
-	return resourceMetricsMonitorNamespaceLister{listers.NewNamespaced[*v1alpha1.ResourceMetricsMonitor](s.ResourceIndexer, namespace)}
+	return resourceMetricsMonitorNamespaceLister{listers.NewNamespaced[*resourcestatemetricsv1alpha1.ResourceMetricsMonitor](s.ResourceIndexer, namespace)}
 }
 
 // ResourceMetricsMonitorNamespaceLister helps list and get ResourceMetricsMonitors.
@@ -56,15 +56,15 @@ func (s *resourceMetricsMonitorLister) ResourceMetricsMonitors(namespace string)
 type ResourceMetricsMonitorNamespaceLister interface {
 	// List lists all ResourceMetricsMonitors in the indexer for a given namespace.
 	// Objects returned here must be treated as read-only.
-	List(selector labels.Selector) (ret []*v1alpha1.ResourceMetricsMonitor, err error)
+	List(selector labels.Selector) (ret []*resourcestatemetricsv1alpha1.ResourceMetricsMonitor, err error)
 	// Get retrieves the ResourceMetricsMonitor from the indexer for a given namespace and name.
 	// Objects returned here must be treated as read-only.
-	Get(name string) (*v1alpha1.ResourceMetricsMonitor, error)
+	Get(name string) (*resourcestatemetricsv1alpha1.ResourceMetricsMonitor, error)
 	ResourceMetricsMonitorNamespaceListerExpansion
 }
 
 // resourceMetricsMonitorNamespaceLister implements the ResourceMetricsMonitorNamespaceLister
 // interface.
 type resourceMetricsMonitorNamespaceLister struct {
-	listers.ResourceIndexer[*v1alpha1.ResourceMetricsMonitor]
+	listers.ResourceIndexer[*resourcestatemetricsv1alpha1.ResourceMetricsMonitor]
 }

@@ -19,13 +19,13 @@ limitations under the License.
 package v1alpha1
 
 import (
-	"context"
+	context "context"
 	time "time"
 
-	resourcestatemetricsv1alpha1 "github.com/rexagod/resource-state-metrics/pkg/apis/resourcestatemetrics/v1alpha1"
+	apisresourcestatemetricsv1alpha1 "github.com/rexagod/resource-state-metrics/pkg/apis/resourcestatemetrics/v1alpha1"
 	versioned "github.com/rexagod/resource-state-metrics/pkg/generated/clientset/versioned"
 	internalinterfaces "github.com/rexagod/resource-state-metrics/pkg/generated/informers/externalversions/internalinterfaces"
-	v1alpha1 "github.com/rexagod/resource-state-metrics/pkg/generated/listers/resourcestatemetrics/v1alpha1"
+	resourcestatemetricsv1alpha1 "github.com/rexagod/resource-state-metrics/pkg/generated/listers/resourcestatemetrics/v1alpha1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 	watch "k8s.io/apimachinery/pkg/watch"
@@ -36,7 +36,7 @@ import (
 // ResourceMetricsMonitors.
 type ResourceMetricsMonitorInformer interface {
 	Informer() cache.SharedIndexInformer
-	Lister() v1alpha1.ResourceMetricsMonitorLister
+	Lister() resourcestatemetricsv1alpha1.ResourceMetricsMonitorLister
 }
 
 type resourceMetricsMonitorInformer struct {
@@ -71,7 +71,7 @@ func NewFilteredResourceMetricsMonitorInformer(client versioned.Interface, names
 				return client.ResourceStateMetricsV1alpha1().ResourceMetricsMonitors(namespace).Watch(context.TODO(), options)
 			},
 		},
-		&resourcestatemetricsv1alpha1.ResourceMetricsMonitor{},
+		&apisresourcestatemetricsv1alpha1.ResourceMetricsMonitor{},
 		resyncPeriod,
 		indexers,
 	)
@@ -82,9 +82,9 @@ func (f *resourceMetricsMonitorInformer) defaultInformer(client versioned.Interf
 }
 
 func (f *resourceMetricsMonitorInformer) Informer() cache.SharedIndexInformer {
-	return f.factory.InformerFor(&resourcestatemetricsv1alpha1.ResourceMetricsMonitor{}, f.defaultInformer)
+	return f.factory.InformerFor(&apisresourcestatemetricsv1alpha1.ResourceMetricsMonitor{}, f.defaultInformer)
 }
 
-func (f *resourceMetricsMonitorInformer) Lister() v1alpha1.ResourceMetricsMonitorLister {
-	return v1alpha1.NewResourceMetricsMonitorLister(f.Informer().GetIndexer())
+func (f *resourceMetricsMonitorInformer) Lister() resourcestatemetricsv1alpha1.ResourceMetricsMonitorLister {
+	return resourcestatemetricsv1alpha1.NewResourceMetricsMonitorLister(f.Informer().GetIndexer())
 }

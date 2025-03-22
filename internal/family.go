@@ -21,6 +21,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/iancoleman/strcase"
 	"github.com/rexagod/resource-state-metrics/pkg/resolver"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/klog/v2"
@@ -82,8 +83,8 @@ type FamilyType struct {
 	LabelValues []string `yaml:"labelValues,omitempty"`
 }
 
-// rawFrom returns the given family in its byte representation.
-func (f *FamilyType) rawFrom(unstructured *unstructured.Unstructured) string {
+// buildMetricString returns the given family in its byte representation.
+func (f *FamilyType) buildMetricString(unstructured *unstructured.Unstructured) string {
 	logger := f.logger.WithValues("family", f.Name)
 
 	familyRawBuilder := strings.Builder{}
@@ -125,7 +126,7 @@ func (f *FamilyType) rawFrom(unstructured *unstructured.Unstructured) string {
 
 					// Label keys are resolved (with the original label keys being the new label key's prefix) if the
 					// returned labelset for the same label key does not exist.
-					resolvedLabelKeys = append(resolvedLabelKeys, strings.ToLower(regexp.MustCompile(`\W`).
+					resolvedLabelKeys = append(resolvedLabelKeys, strcase.ToLowerCamel(regexp.MustCompile(`\W`).
 						ReplaceAllString(metric.LabelKeys[i]+k, "_")))
 				}
 			}

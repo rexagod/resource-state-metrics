@@ -19,129 +19,34 @@ limitations under the License.
 package fake
 
 import (
-	"context"
-
 	v1alpha1 "github.com/rexagod/resource-state-metrics/pkg/apis/resourcestatemetrics/v1alpha1"
-	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	labels "k8s.io/apimachinery/pkg/labels"
-	types "k8s.io/apimachinery/pkg/types"
-	watch "k8s.io/apimachinery/pkg/watch"
-	testing "k8s.io/client-go/testing"
+	resourcestatemetricsv1alpha1 "github.com/rexagod/resource-state-metrics/pkg/generated/clientset/versioned/typed/resourcestatemetrics/v1alpha1"
+	gentype "k8s.io/client-go/gentype"
 )
 
-// FakeResourceMetricsMonitors implements ResourceMetricsMonitorInterface
-type FakeResourceMetricsMonitors struct {
+// fakeResourceMetricsMonitors implements ResourceMetricsMonitorInterface
+type fakeResourceMetricsMonitors struct {
+	*gentype.FakeClientWithList[*v1alpha1.ResourceMetricsMonitor, *v1alpha1.ResourceMetricsMonitorList]
 	Fake *FakeResourceStateMetricsV1alpha1
-	ns   string
 }
 
-var resourcemetricsmonitorsResource = v1alpha1.SchemeGroupVersion.WithResource("resourcemetricsmonitors")
-
-var resourcemetricsmonitorsKind = v1alpha1.SchemeGroupVersion.WithKind("ResourceMetricsMonitor")
-
-// Get takes name of the resourceMetricsMonitor, and returns the corresponding resourceMetricsMonitor object, and an error if there is any.
-func (c *FakeResourceMetricsMonitors) Get(ctx context.Context, name string, options v1.GetOptions) (result *v1alpha1.ResourceMetricsMonitor, err error) {
-	emptyResult := &v1alpha1.ResourceMetricsMonitor{}
-	obj, err := c.Fake.
-		Invokes(testing.NewGetActionWithOptions(resourcemetricsmonitorsResource, c.ns, name, options), emptyResult)
-
-	if obj == nil {
-		return emptyResult, err
+func newFakeResourceMetricsMonitors(fake *FakeResourceStateMetricsV1alpha1, namespace string) resourcestatemetricsv1alpha1.ResourceMetricsMonitorInterface {
+	return &fakeResourceMetricsMonitors{
+		gentype.NewFakeClientWithList[*v1alpha1.ResourceMetricsMonitor, *v1alpha1.ResourceMetricsMonitorList](
+			fake.Fake,
+			namespace,
+			v1alpha1.SchemeGroupVersion.WithResource("resourcemetricsmonitors"),
+			v1alpha1.SchemeGroupVersion.WithKind("ResourceMetricsMonitor"),
+			func() *v1alpha1.ResourceMetricsMonitor { return &v1alpha1.ResourceMetricsMonitor{} },
+			func() *v1alpha1.ResourceMetricsMonitorList { return &v1alpha1.ResourceMetricsMonitorList{} },
+			func(dst, src *v1alpha1.ResourceMetricsMonitorList) { dst.ListMeta = src.ListMeta },
+			func(list *v1alpha1.ResourceMetricsMonitorList) []*v1alpha1.ResourceMetricsMonitor {
+				return gentype.ToPointerSlice(list.Items)
+			},
+			func(list *v1alpha1.ResourceMetricsMonitorList, items []*v1alpha1.ResourceMetricsMonitor) {
+				list.Items = gentype.FromPointerSlice(items)
+			},
+		),
+		fake,
 	}
-	return obj.(*v1alpha1.ResourceMetricsMonitor), err
-}
-
-// List takes label and field selectors, and returns the list of ResourceMetricsMonitors that match those selectors.
-func (c *FakeResourceMetricsMonitors) List(ctx context.Context, opts v1.ListOptions) (result *v1alpha1.ResourceMetricsMonitorList, err error) {
-	emptyResult := &v1alpha1.ResourceMetricsMonitorList{}
-	obj, err := c.Fake.
-		Invokes(testing.NewListActionWithOptions(resourcemetricsmonitorsResource, resourcemetricsmonitorsKind, c.ns, opts), emptyResult)
-
-	if obj == nil {
-		return emptyResult, err
-	}
-
-	label, _, _ := testing.ExtractFromListOptions(opts)
-	if label == nil {
-		label = labels.Everything()
-	}
-	list := &v1alpha1.ResourceMetricsMonitorList{ListMeta: obj.(*v1alpha1.ResourceMetricsMonitorList).ListMeta}
-	for _, item := range obj.(*v1alpha1.ResourceMetricsMonitorList).Items {
-		if label.Matches(labels.Set(item.Labels)) {
-			list.Items = append(list.Items, item)
-		}
-	}
-	return list, err
-}
-
-// Watch returns a watch.Interface that watches the requested resourceMetricsMonitors.
-func (c *FakeResourceMetricsMonitors) Watch(ctx context.Context, opts v1.ListOptions) (watch.Interface, error) {
-	return c.Fake.
-		InvokesWatch(testing.NewWatchActionWithOptions(resourcemetricsmonitorsResource, c.ns, opts))
-
-}
-
-// Create takes the representation of a resourceMetricsMonitor and creates it.  Returns the server's representation of the resourceMetricsMonitor, and an error, if there is any.
-func (c *FakeResourceMetricsMonitors) Create(ctx context.Context, resourceMetricsMonitor *v1alpha1.ResourceMetricsMonitor, opts v1.CreateOptions) (result *v1alpha1.ResourceMetricsMonitor, err error) {
-	emptyResult := &v1alpha1.ResourceMetricsMonitor{}
-	obj, err := c.Fake.
-		Invokes(testing.NewCreateActionWithOptions(resourcemetricsmonitorsResource, c.ns, resourceMetricsMonitor, opts), emptyResult)
-
-	if obj == nil {
-		return emptyResult, err
-	}
-	return obj.(*v1alpha1.ResourceMetricsMonitor), err
-}
-
-// Update takes the representation of a resourceMetricsMonitor and updates it. Returns the server's representation of the resourceMetricsMonitor, and an error, if there is any.
-func (c *FakeResourceMetricsMonitors) Update(ctx context.Context, resourceMetricsMonitor *v1alpha1.ResourceMetricsMonitor, opts v1.UpdateOptions) (result *v1alpha1.ResourceMetricsMonitor, err error) {
-	emptyResult := &v1alpha1.ResourceMetricsMonitor{}
-	obj, err := c.Fake.
-		Invokes(testing.NewUpdateActionWithOptions(resourcemetricsmonitorsResource, c.ns, resourceMetricsMonitor, opts), emptyResult)
-
-	if obj == nil {
-		return emptyResult, err
-	}
-	return obj.(*v1alpha1.ResourceMetricsMonitor), err
-}
-
-// UpdateStatus was generated because the type contains a Status member.
-// Add a +genclient:noStatus comment above the type to avoid generating UpdateStatus().
-func (c *FakeResourceMetricsMonitors) UpdateStatus(ctx context.Context, resourceMetricsMonitor *v1alpha1.ResourceMetricsMonitor, opts v1.UpdateOptions) (result *v1alpha1.ResourceMetricsMonitor, err error) {
-	emptyResult := &v1alpha1.ResourceMetricsMonitor{}
-	obj, err := c.Fake.
-		Invokes(testing.NewUpdateSubresourceActionWithOptions(resourcemetricsmonitorsResource, "status", c.ns, resourceMetricsMonitor, opts), emptyResult)
-
-	if obj == nil {
-		return emptyResult, err
-	}
-	return obj.(*v1alpha1.ResourceMetricsMonitor), err
-}
-
-// Delete takes name of the resourceMetricsMonitor and deletes it. Returns an error if one occurs.
-func (c *FakeResourceMetricsMonitors) Delete(ctx context.Context, name string, opts v1.DeleteOptions) error {
-	_, err := c.Fake.
-		Invokes(testing.NewDeleteActionWithOptions(resourcemetricsmonitorsResource, c.ns, name, opts), &v1alpha1.ResourceMetricsMonitor{})
-
-	return err
-}
-
-// DeleteCollection deletes a collection of objects.
-func (c *FakeResourceMetricsMonitors) DeleteCollection(ctx context.Context, opts v1.DeleteOptions, listOpts v1.ListOptions) error {
-	action := testing.NewDeleteCollectionActionWithOptions(resourcemetricsmonitorsResource, c.ns, opts, listOpts)
-
-	_, err := c.Fake.Invokes(action, &v1alpha1.ResourceMetricsMonitorList{})
-	return err
-}
-
-// Patch applies the patch and returns the patched resourceMetricsMonitor.
-func (c *FakeResourceMetricsMonitors) Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts v1.PatchOptions, subresources ...string) (result *v1alpha1.ResourceMetricsMonitor, err error) {
-	emptyResult := &v1alpha1.ResourceMetricsMonitor{}
-	obj, err := c.Fake.
-		Invokes(testing.NewPatchSubresourceActionWithOptions(resourcemetricsmonitorsResource, c.ns, name, pt, data, opts, subresources...), emptyResult)
-
-	if obj == nil {
-		return emptyResult, err
-	}
-	return obj.(*v1alpha1.ResourceMetricsMonitor), err
 }

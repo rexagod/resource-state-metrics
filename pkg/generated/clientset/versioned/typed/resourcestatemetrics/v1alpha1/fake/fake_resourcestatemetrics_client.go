@@ -29,7 +29,7 @@ type FakeResourceStateMetricsV1alpha1 struct {
 }
 
 func (c *FakeResourceStateMetricsV1alpha1) ResourceMetricsMonitors(namespace string) v1alpha1.ResourceMetricsMonitorInterface {
-	return &FakeResourceMetricsMonitors{c, namespace}
+	return newFakeResourceMetricsMonitors(c, namespace)
 }
 
 // RESTClient returns a RESTClient that is used to communicate

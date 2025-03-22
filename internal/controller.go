@@ -235,6 +235,7 @@ func (c *Controller) Run(ctx context.Context, workers int) error {
 	logger.V(1).Info("Configuring main server", "address", mainAddr)
 	mainInstance := newMainServer(
 		mainAddr,
+		*c.options.Kubeconfig,
 		c.uidToStores,
 		requestDurationVec,
 	)

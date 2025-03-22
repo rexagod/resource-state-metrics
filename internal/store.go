@@ -126,7 +126,7 @@ func (s *StoreType) Add(objectI interface{}) error {
 
 		// Generate the metrics.
 		f.logger = s.logger
-		familyMetrics[i] = f.rawFrom(unstructuredObject)
+		familyMetrics[i] = f.buildMetricString(unstructuredObject)
 		s.logger.V(4).Info("Add", "family", f.Name, "metrics", familyMetrics[i])
 	}
 

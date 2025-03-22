@@ -42,7 +42,34 @@ kube_customresource_foos_info{static="42",dynamicshouldresolvetoname="test-sampl
 kube_customresource_foo_replicas{name="test-sample",group="samplecontroller.k8s.io",version="v1alpha1",kind="Foo"} 1.000000
 # HELP kube_customresource_platform_info_conformance Information about each MyPlatform instance (using existing exhaustive CRS feature-set for conformance)
 # TYPE kube_customresource_platform_info_conformance gauge
-kube_customresource_platform_info_conformance{id="1000",os="linux",job="resource-state-metrics",name="test-sample",appid="test-sample",language="csharp",label_bar="2",label_foo="1",label_job="resource-state-metrics",instancesize="small",environmenttype="dev",group="contoso.com",version="v1alpha1",kind="MyPlatform"} 2.000000
+kube_customresource_platform_info_conformance{id="1000",os="linux",job="resource-state-metrics",name="test-sample",appId="test-sample",labelBar="2",labelFoo="1",labelJob="resource-state-metrics",language="csharp",instanceSize="small",environmentType="dev",group="contoso.com",version="v1alpha1",kind="MyPlatform"} 2.000000
+`
+	if equal := cmp.Equal(gotRaw, wantRaw); !equal {
+		t.Fatalf("[-got +want]:\n%s", cmp.Diff(gotRaw, wantRaw))
+	}
+}
+
+func TestExternalMainServer(t *testing.T) {
+	t.Parallel()
+
+	// Test if /metrics response is as expected.
+	r := framework.NewRunner()
+	mainPort, found := os.LookupEnv(MainPort)
+	if !found {
+		t.Fatal(MainPort + "is not set")
+	}
+	externalMainMetricsURL := &url.URL{
+		Host:   "localhost:" + mainPort,
+		Path:   "/external",
+		Scheme: "http",
+	}
+	gotRaw, err := r.GetRaw(externalMainMetricsURL)
+	if err != nil {
+		t.Fatalf("failed to parse metrics: %v", err)
+	}
+	wantRaw := `# HELP openshift_clusterresourcequota_selector Selector of clusterresource quota, which defines the affected namespaces.
+# TYPE openshift_clusterresourcequota_selector gauge
+openshift_clusterresourcequota_selector{name="namespace1-clusterquota",type="match-labels",key="quota",value="namespace1-clusterquota"} 1
 `
 	if equal := cmp.Equal(gotRaw, wantRaw); !equal {
 		t.Fatalf("[-got +want]:\n%s", cmp.Diff(gotRaw, wantRaw))

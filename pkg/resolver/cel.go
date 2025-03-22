@@ -51,9 +51,7 @@ var _ interpreter.ActualCostEstimator = costEstimator{}
 // function: The function name.
 // args: The arguments passed to the function.
 // result: The return value of the function.
-//
-//nolint:revive // Keep the unused args for aforementioned reference.
-func (ce costEstimator) CallCost(function, _ string, args []ref.Val, result ref.Val) *uint64 {
+func (ce costEstimator) CallCost(function, _ string, _ []ref.Val, _ ref.Val) *uint64 {
 	estimatedCost := uint64(1)
 	customFunctionsCosts := map[string]uint64{}
 	estimatedCost += customFunctionsCosts[function]

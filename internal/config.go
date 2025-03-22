@@ -38,12 +38,12 @@ type configure interface {
 	build(ctx context.Context, uidToStoresMap map[types.UID][]*StoreType, tryNoCache bool)
 }
 
-// configuration defines the structured representation of a CEL-based YAML configuration.
+// configuration defines the structured representation of a YAML configuration.
 type configuration struct {
 	Stores []*StoreType `yaml:"stores"`
 }
 
-// configurer knows how to parse a CEL-based YAML configuration.
+// configurer knows how to parse a YAML configuration.
 type configurer struct {
 
 	// configuration is the structured configuration.

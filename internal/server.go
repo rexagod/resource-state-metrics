@@ -30,6 +30,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/prometheus/common/expfmt"
+	"github.com/rexagod/resource-state-metrics/external"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/klog/v2"
@@ -64,6 +65,9 @@ type mainServer struct {
 	// registered in the telemetry registry, and will be available along with all other main metrics, to not pollute the
 	// resource metrics.
 	requestsDurationVec *prometheus.ObserverVec
+
+	// Cluster configuration needed for LW clients.
+	kubeconfig string
 }
 
 // Ensure that selfServer implements the server interface.
@@ -74,12 +78,21 @@ var _ server = &mainServer{}
 
 // newSelfServer returns a new selfServer.
 func newSelfServer(addr string) *selfServer {
-	return &selfServer{promHTTPLogger{"self"}, addr}
+	return &selfServer{
+		promHTTPLogger: promHTTPLogger{"self"},
+		addr:           addr,
+	}
 }
 
 // newMainServer returns a new mainServer.
-func newMainServer(addr string, m map[types.UID][]*StoreType, requestsDurationVec prometheus.ObserverVec) *mainServer {
-	return &mainServer{promHTTPLogger{"main"}, addr, m, &requestsDurationVec}
+func newMainServer(addr, kubeconfig string, m map[types.UID][]*StoreType, requestsDurationVec prometheus.ObserverVec) *mainServer {
+	return &mainServer{
+		promHTTPLogger:      promHTTPLogger{"main"},
+		addr:                addr,
+		kubeconfig:          kubeconfig,
+		m:                   m,
+		requestsDurationVec: &requestsDurationVec,
+	}
 }
 
 // Build sets up the selfServer with the given gatherer.
@@ -126,26 +139,34 @@ func (s *mainServer) build(ctx context.Context, client kubernetes.Interface, _ p
 	mux := http.NewServeMux()
 
 	// Handle the metrics path.
-	var readBinarySemaphore sync.RWMutex
-	metricsHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		readBinarySemaphore.RLock()
-		defer readBinarySemaphore.RUnlock()
+	var binarySemaphore sync.RWMutex
+	metricsHandler := func(generator func(w http.ResponseWriter)) http.HandlerFunc {
+		return func(w http.ResponseWriter, _ *http.Request) {
+			binarySemaphore.RLock()
+			defer binarySemaphore.RUnlock()
 
-		// OpenMetrics is experimental at the moment.
-		negotiatedContentType := expfmt.Negotiate(r.Header)
-		if negotiatedContentType.FormatType() != expfmt.TypeTextPlain {
+			// OpenMetrics is experimental at the moment.
 			w.Header().Set("Content-Type", string(expfmt.NewFormat(expfmt.TypeTextPlain)))
-		}
 
-		// Write out the metrics from all the stores.
+			// Generate metrics.
+			generator(w)
+		}
+	}
+	mux.Handle("/metrics", promhttp.InstrumentHandlerDuration(*s.requestsDurationVec, metricsHandler(func(w http.ResponseWriter) {
 		for _, stores := range s.m {
-			err := newMetricsWriter(stores...).writeAllTo(w)
+			err := newMetricsWriter(stores...).writeStores(w)
 			if err != nil {
 				logger.Error(err, "error writing metrics", "source", s.source)
 			}
 		}
-	})
-	mux.Handle("/metrics", promhttp.InstrumentHandlerDuration(*s.requestsDurationVec, metricsHandler))
+	})))
+
+	// Handle the external path.
+	externalCollectors := external.CollectorsGetter().SetKubeConfig(s.kubeconfig)
+	externalCollectors.Build()
+	mux.Handle("/external", promhttp.InstrumentHandlerDuration(*s.requestsDurationVec, metricsHandler(func(w http.ResponseWriter) {
+		externalCollectors.Write(w)
+	})))
 
 	// Handle the healthz path.
 	healthzProber := newHealthz(s.source)
