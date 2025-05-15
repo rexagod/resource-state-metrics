@@ -1,5 +1,5 @@
 /*
-Copyright 2024 The Kubernetes resource-state-metrics Authors.
+Copyright 2025 The Kubernetes resource-state-metrics Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -50,8 +50,6 @@ func NewOptions(logger klog.Logger) *Options {
 }
 
 // Read reads the command-line flags and applies overrides, if any.
-//
-//nolint:lll // Flag descriptions should be, and are, descriptive.
 func (o *Options) Read() {
 	o.AutoGOMAXPROCS = flag.Bool("auto-gomaxprocs", true, "Automatically set GOMAXPROCS to match CPU quota.")
 	o.RatioGOMEMLIMIT = flag.Float64("ratio-gomemlimit", 0.9, "GOMEMLIMIT to memory quota ratio.")

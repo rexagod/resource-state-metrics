@@ -20,6 +20,7 @@ linters:
     - ireturn
     - mnd
     - testpackage
+    - wrapcheck
     - wsl
   presets:
     - bugs
@@ -49,7 +50,7 @@ linters-settings:
     lines: -1
     statements: 85
   lll:
-    line-length: 150
+    line-length: 200
   perfsprint:
     strconcat: false
   varnamelen:

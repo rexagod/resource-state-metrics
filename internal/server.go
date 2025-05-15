@@ -1,5 +1,5 @@
 /*
-Copyright 2024 The Kubernetes resource-state-metrics Authors.
+Copyright 2025 The Kubernetes resource-state-metrics Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -38,7 +38,6 @@ import (
 
 // server defines behaviours for a Prometheus-based exposition server.
 type server interface {
-
 	// Build sets up the server with the given gatherer.
 	build(ctx context.Context, client kubernetes.Interface, gatherer prometheus.Gatherer) *http.Server
 }
@@ -46,7 +45,6 @@ type server interface {
 // selfServer implements the server interface, and exposes telemetry metrics.
 type selfServer struct {
 	promHTTPLogger
-
 	// addr is the http.Server address to listen on.
 	addr string
 }
@@ -54,19 +52,15 @@ type selfServer struct {
 // mainServer implements the server interface, and exposes resource metrics.
 type mainServer struct {
 	promHTTPLogger
-
 	// addr is the http.Server address to listen on.
 	addr string
-
 	// m is the map of currently active stores per resource.
 	m map[types.UID][]*StoreType
-
 	// requestsDurationVec is a histogram denoting the request durations for the metrics endpoint. The metric itself is
 	// registered in the telemetry registry, and will be available along with all other main metrics, to not pollute the
 	// resource metrics.
 	requestsDurationVec *prometheus.ObserverVec
-
-	// Cluster configuration needed for LW clients.
+	// Cluster configuration (needed for LW clients).
 	kubeconfig string
 }
 
@@ -186,7 +180,6 @@ func (s *mainServer) build(ctx context.Context, client kubernetes.Interface, _ p
 
 // promHTTPLogger implements promhttp.Logger.
 type promHTTPLogger struct {
-
 	// source is the originating server for the log.
 	source string
 }

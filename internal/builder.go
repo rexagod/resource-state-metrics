@@ -1,5 +1,5 @@
 /*
-Copyright 2024 The Kubernetes resource-state-metrics Authors.
+Copyright 2025 The Kubernetes resource-state-metrics Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -45,42 +45,44 @@ func buildStore(
 	tryNoCache bool,
 	labelSelector, fieldSelector string,
 	resolver ResolverType,
-	labelKeys []string, labelValues []string,
+	labelKeys, labelValues []string,
 ) *StoreType {
 	logger := klog.FromContext(ctx)
-
-	// Create the reflector's LW.
 	listerwatcher := buildLW(ctx, dynamicClientset, labelSelector, fieldSelector, tryNoCache, gvkWithR.GroupVersionResource)
+	headers := buildMetricHeaders(metricFamilies)
+	resolver = ensureResolver(resolver)
+	s := newStore(logger, headers, metricFamilies, resolver, labelKeys, labelValues)
+	startReflector(ctx, listerwatcher, gvkWithR, s)
 
-	// Build metric headers.
+	return s
+}
+
+func buildMetricHeaders(metricFamilies []*FamilyType) []string {
 	headers := make([]string, len(metricFamilies))
 	for i, f := range metricFamilies {
 		headers[i] = f.buildHeaders()
 	}
 
-	// Set the default resolver.
+	return headers
+}
+
+func ensureResolver(resolver ResolverType) ResolverType {
 	if resolver == ResolverTypeNone {
-		resolver = ResolverTypeUnstructured
+		return ResolverTypeUnstructured
 	}
 
-	// Instantiate a new store.
-	s := newStore(
-		logger,
-		headers,
-		metricFamilies,
-		resolver,
-		labelKeys, labelValues,
-	)
+	return resolver
+}
 
-	// Create and start the reflector.
+func startReflector(ctx context.Context, lw *cache.ListWatch, gvkWithR gvkr, s *StoreType) {
 	wrapper := &unstructured.Unstructured{}
 	wrapper.SetGroupVersionKind(gvkWithR.GroupVersionKind)
-	reflector := cache.NewReflectorWithOptions(listerwatcher, wrapper, s, cache.ReflectorOptions{
+
+	reflector := cache.NewReflectorWithOptions(lw, wrapper, s, cache.ReflectorOptions{
 		Name: fmt.Sprintf("%#q reflector", gvkWithR.GroupVersionResource.String()),
 	})
-	go reflector.Run(ctx.Done())
 
-	return s
+	go reflector.Run(ctx.Done())
 }
 
 func buildLW(
@@ -96,11 +98,11 @@ func buildLW(
 		FieldSelector: fieldSelector,
 	}
 	if tryNoCache {
-		resourceVersionLatestBestEffort := "0"
-		lwo.ResourceVersion = resourceVersionLatestBestEffort
+		lwo.ResourceVersion = "0"
 		lwo.ResourceVersionMatch = metav1.ResourceVersionMatchNotOlderThan
 	}
-	listerwatcher := &cache.ListWatch{
+
+	return &cache.ListWatch{
 		ListFunc: func(_ metav1.ListOptions) (runtime.Object, error) {
 			o, err := dynamicClientset.Resource(gvr).List(ctx, lwo)
 			if err != nil {
@@ -118,6 +120,4 @@ func buildLW(
 			return o, err
 		},
 	}
-
-	return listerwatcher
 }

@@ -99,7 +99,7 @@ func TestFamilyType_rawFrom(t *testing.T) {
 			t.Parallel()
 			actual := tt.family.buildMetricString(unstructuredWrapper)
 			if actual != tt.expected {
-				t.Errorf("%s", cmp.Diff(actual, tt.expected))
+				t.Errorf("%s\n%s", actual, cmp.Diff(actual, tt.expected))
 			}
 		})
 	}

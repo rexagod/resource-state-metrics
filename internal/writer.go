@@ -1,19 +1,3 @@
-/*
-Copyright 2024 The Kubernetes resource-state-metrics Authors.
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-*/
-
 package internal
 
 import (
@@ -21,49 +5,81 @@ import (
 	"io"
 )
 
-// metricsWriter knows how to write metrics for the groups of metric families present in the group of stores it holds
-// to an io.Writer.
+// metricsWriter writes metrics from a group of stores to an io.Writer.
 type metricsWriter struct {
 	stores []*StoreType
 }
 
-// newMetricsWriter returns a new metricsWriter.
+// newMetricsWriter creates a new metricsWriter.
 func newMetricsWriter(stores ...*StoreType) *metricsWriter {
 	return &metricsWriter{
 		stores: stores,
 	}
 }
 
-// writeStores writes out metrics from the underlying stores to the given writer per resource. It writes metrics so that
-// the ones with the same name are grouped together when written out, and guarantees an exposition format that is safe
-// to be ingested by Prometheus.
-func (m metricsWriter) writeStores(writer io.Writer) error {
+// writeStores writes out metrics from the underlying stores to the given writer, per resource.
+// It writes metrics so that the ones with the same name are grouped together when written out, and guarantees an exposition format that is safe to be ingested by Prometheus.
+func (m *metricsWriter) writeStores(writer io.Writer) error {
 	if len(m.stores) == 0 {
 		return nil
 	}
-	for _, s := range m.stores {
-		s.mutex.RLock()
-		defer s.mutex.RUnlock()
+
+	m.lockAllStores()
+	defer m.unlockAllStores()
+
+	for _, store := range m.stores {
+		if err := m.writeStore(writer, store); err != nil {
+			return err
+		}
 	}
-	for j := range len(m.stores) {
-		for i, header := range m.stores[j].headers {
-			if header != "" && header != "\n" {
-				header += "\n"
+
+	return nil
+}
+
+func (m *metricsWriter) lockAllStores() {
+	for _, store := range m.stores {
+		store.mutex.RLock()
+	}
+}
+
+func (m *metricsWriter) unlockAllStores() {
+	for _, store := range m.stores {
+		store.mutex.RUnlock()
+	}
+}
+
+func (m *metricsWriter) writeStore(writer io.Writer, store *StoreType) error {
+	for i, header := range store.headers {
+		if err := writeHeader(writer, header); err != nil {
+			return fmt.Errorf("error writing header: %w", err)
+		}
+
+		for _, metricFamilies := range store.metrics {
+			if i >= len(metricFamilies) {
+				continue
 			}
-			n, err := writer.Write([]byte(header))
-			if err != nil {
-				return fmt.Errorf("error writing Help text (%s) after %d bytes: %w", header, n, err)
-			}
-			for _, metricFamilies := range m.stores[j].metrics {
-				if i >= len(metricFamilies) {
-					continue
-				}
-				n, err = writer.Write([]byte(metricFamilies[i]))
-				if err != nil {
-					return fmt.Errorf("error writing metric family after %d bytes: %w", n, err)
-				}
+			if err := writeMetricFamily(writer, metricFamilies[i]); err != nil {
+				return err
 			}
 		}
+	}
+
+	return nil
+}
+
+func writeHeader(writer io.Writer, header string) error {
+	if header != "" && header != "\n" {
+		header += "\n"
+	}
+	_, err := writer.Write([]byte(header))
+
+	return err
+}
+
+func writeMetricFamily(writer io.Writer, metric string) error {
+	n, err := writer.Write([]byte(metric))
+	if err != nil {
+		return fmt.Errorf("error writing metric family after %d bytes: %w", n, err)
 	}
 
 	return nil

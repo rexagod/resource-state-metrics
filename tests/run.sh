@@ -6,7 +6,7 @@ set -o pipefail
 TIMEOUT=${TEST_TIMEOUT:-240}
 
 # Start the controller in the background with a timeout.
-timeout --signal SIGINT "$TIMEOUT" make setup apply apply-testdata local &
+timeout --signal SIGINT "$TIMEOUT" make setup apply apply_testdata local &
 PID=$!
 echo -e "\n[Running controller in background with PID: $PID]\n"
 
@@ -32,7 +32,7 @@ terminate
 wait $PID
 
 # Cleanup.
-make delete delete-testdata
+make delete delete_testdata
 
 # Exit with the test exit code.
 exit $TEST_EXIT_CODE

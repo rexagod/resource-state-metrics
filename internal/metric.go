@@ -1,5 +1,5 @@
 /*
-Copyright 2024 The Kubernetes resource-state-metrics Authors.
+Copyright 2025 The Kubernetes resource-state-metrics Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -25,58 +25,72 @@ import (
 
 // MetricType represents a single time series.
 type MetricType struct {
-
-	// LabelKeys is the set of label keys.
-	LabelKeys []string `yaml:"labelKeys"`
-
-	// LabelValues is the set of label values.
-	LabelValues []string `yaml:"labelValues"`
-
-	// Value is the metric Value.
-	Value string `yaml:"value"`
-
-	// Resolver is the resolver to use to evaluate the labelset expressions.
-	Resolver ResolverType `yaml:"resolver"`
+	LabelKeys   []string     `yaml:"labelKeys"`
+	LabelValues []string     `yaml:"labelValues"`
+	Value       string       `yaml:"value"`
+	Resolver    ResolverType `yaml:"resolver"`
 }
 
-// writeMetricTo writes the given metric to the given strings.Builder.
 func writeMetricTo(writer *strings.Builder, g, v, k, resolvedValue string, resolvedLabelKeys, resolvedLabelValues []string) error {
-	if len(resolvedLabelKeys) != len(resolvedLabelValues) {
+	if err := validateLabelLengths(resolvedLabelKeys, resolvedLabelValues); err != nil {
+		return err
+	}
+	sortLabelset(resolvedLabelKeys, resolvedLabelValues)
+	resolvedLabelKeys, resolvedLabelValues = appendGVKLabels(resolvedLabelKeys, resolvedLabelValues, g, v, k)
+	if err := writeLabels(writer, resolvedLabelKeys, resolvedLabelValues); err != nil {
+		return err
+	}
+
+	return writeValue(writer, resolvedValue)
+}
+
+func validateLabelLengths(keys, values []string) error {
+	if len(keys) != len(values) {
 		return fmt.Errorf(
 			"expected labelKeys %q to be of same length (%d) as the resolved labelValues %q (%d)",
-			resolvedLabelKeys, len(resolvedLabelKeys), resolvedLabelValues, len(resolvedLabelValues),
+			keys, len(keys), values, len(values),
 		)
 	}
 
-	// Sort the label keys and values. This preserves order and helps test deterministically.
-	sortLabelset(resolvedLabelKeys, resolvedLabelValues)
+	return nil
+}
 
-	// Append GVK metadata to the metric.
-	resolvedLabelKeys = append(resolvedLabelKeys, "group", "version", "kind")
-	resolvedLabelValues = append(resolvedLabelValues, g, v, k)
+func appendGVKLabels(keys, values []string, g, v, k string) ([]string, []string) {
+	keys = append(keys, "group", "version", "kind")
+	values = append(values, g, v, k)
 
-	// Write the metric.
-	if len(resolvedLabelKeys) > 0 {
-		separator := "{"
-		for i := range resolvedLabelKeys {
-			writer.WriteString(separator)
-			writer.WriteString(resolvedLabelKeys[i])
-			writer.WriteString("=\"")
-			n, err := strings.NewReplacer("\\", `\\`, "\n", `\n`, "\"", `\"`).WriteString(writer, resolvedLabelValues[i])
-			if err != nil {
-				return fmt.Errorf("error writing metric after %d bytes: %w", n, err)
-			}
-			writer.WriteString("\"")
-			separator = ","
+	return keys, values
+}
+
+func writeLabels(writer *strings.Builder, keys, values []string) error {
+	if len(keys) == 0 {
+		return nil
+	}
+
+	separator := "{"
+	for i := range keys {
+		writer.WriteString(separator)
+		writer.WriteString(keys[i])
+		writer.WriteString("=\"")
+		n, err := strings.NewReplacer("\\", `\\`, "\n", `\n`, "\"", `\"`).WriteString(writer, values[i])
+		if err != nil {
+			return fmt.Errorf("error writing metric after %d bytes: %w", n, err)
 		}
-		writer.WriteString("}")
+		writer.WriteString("\"")
+		separator = ","
 	}
+	writer.WriteString("}")
+
+	return nil
+}
+
+func writeValue(writer *strings.Builder, value string) error {
 	writer.WriteByte(' ')
-	metricValueAsFloat, err := strconv.ParseFloat(resolvedValue, 64)
+	floatVal, err := strconv.ParseFloat(value, 64)
 	if err != nil {
-		return fmt.Errorf("error parsing metric value %q as float64: %w", resolvedValue, err)
+		return fmt.Errorf("error parsing metric value %q as float64: %w", value, err)
 	}
-	n, err := fmt.Fprintf(writer, "%f", metricValueAsFloat)
+	n, err := fmt.Fprintf(writer, "%f", floatVal)
 	if err != nil {
 		return fmt.Errorf("error writing (float64) metric value after %d bytes: %w", n, err)
 	}

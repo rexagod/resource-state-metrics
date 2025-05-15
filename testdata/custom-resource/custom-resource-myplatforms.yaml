@@ -6,8 +6,8 @@ metadata:
   labels:
     foo: "1"
     bar: "2"
-    job: "resource-state-metrics"
   annotations:
+    job: "resource-state-metrics"
     id: "1000"
 spec:
   appId: test-sample
@@ -16,3 +16,23 @@ spec:
   instanceSize: small
   environmentType: dev
   replicas: 3
+  tags:
+    - frontend
+    - middleware
+    - backend
+  features:
+    - monitoring
+    - alerting
+  versions:
+    - "1.0"
+    - "2.0"
+    - "3.0"
+    - "4.0"
+  xProps:
+    nonComposite: "example-value"
+    compositeArray:
+      - "value1"
+      - "value2"
+    compositeMap:
+      key1: "value1"
+      key2: "value2"

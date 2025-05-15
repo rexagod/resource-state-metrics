@@ -1,5 +1,5 @@
 /*
-Copyright 2024 The Kubernetes resource-state-metrics Authors.
+Copyright 2025 The Kubernetes resource-state-metrics Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -20,7 +20,7 @@ package resolver
 type Resolver interface {
 
 	// Resolve resolves the given expression.
-	// NOTE: The returned map should have a single key:value (query:resolved[LabelValues,Value], of unit length) pair if
-	// the expression is resolved to a non-composite value.
+	// NOTE: The returned map should have a single key:value (query:resolved[LabelValues,Value], of unit length) pair if the expression is resolved to a non-composite value.
+	// NOTE: The returned list representations should follow a `list_name#index` format.
 	Resolve(query string, unstructuredObjectMap map[string]interface{}) map[string]string
 }

@@ -1,5 +1,5 @@
 /*
-Copyright 2024 The Kubernetes resource-state-metrics Authors.
+Copyright 2025 The Kubernetes resource-state-metrics Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -27,28 +27,17 @@ import (
 
 // probe defines behaviours for a health-check probe.
 type probe interface {
-
-	// server returns the originating server for the probe.
 	server() string
-
-	// text returns the string representation of the probe.
 	text() string
-
-	// probe knows how to handle a health probe.
 	probe(ctx context.Context, logger klog.Logger, client kubernetes.Interface) http.Handler
 }
 
 // healthz implements the probe interface.
 type healthz struct {
-
-	// source is the originating server for the probe.
-	source string
-
-	// asString is the string representation of the probe.
+	source   string
 	asString string
 }
 
-// newHealthz returns a new healthz probe.
 func newHealthz(source string) probe {
 	return healthz{
 		source:   source,
@@ -56,28 +45,21 @@ func newHealthz(source string) probe {
 	}
 }
 
-// source returns the originating server for the probe.
 func (h healthz) server() string {
 	return h.source
 }
 
-// asString returns the string representation of the probe.
 func (h healthz) text() string {
 	return h.asString
 }
 
-// probe returns a healthz probe.
 func (h healthz) probe(ctx context.Context, logger klog.Logger, client kubernetes.Interface) http.Handler {
 	return genericProbe(ctx, h, logger, client)
 }
 
 // livez implements the probe interface.
 type livez struct {
-
-	// source is the originating server for the probe.
-	source string
-
-	// asString is the string representation of the probe.
+	source   string
 	asString string
 }
 
@@ -89,28 +71,21 @@ func newLivez(source string) probe {
 	}
 }
 
-// server returns the originating server for the probe.
 func (l livez) server() string {
 	return l.source
 }
 
-// text returns the string representation of the probe.
 func (l livez) text() string {
 	return l.asString
 }
 
-// probe returns a livez probe.
 func (l livez) probe(ctx context.Context, logger klog.Logger, client kubernetes.Interface) http.Handler {
 	return genericProbe(ctx, l, logger, client)
 }
 
 // readyz implements the probe interface.
 type readyz struct {
-
-	// source is the originating server for the probe.
-	source string
-
-	// asString is the string representation of the probe.
+	source   string
 	asString string
 }
 
@@ -122,17 +97,14 @@ func newReadyz(source string) probe {
 	}
 }
 
-// server returns the originating server for the probe.
 func (r readyz) server() string {
 	return r.source
 }
 
-// text returns the string representation of the probe.
 func (r readyz) text() string {
 	return r.asString
 }
 
-// probe returns a readyz probe.
 func (r readyz) probe(ctx context.Context, logger klog.Logger, client kubernetes.Interface) http.Handler {
 	return genericProbe(ctx, r, logger, client)
 }
@@ -150,7 +122,6 @@ func genericProbe(ctx context.Context, p probe, logger klog.Logger, client kuber
 
 			return
 		}
-
 		w.WriteHeader(http.StatusOK)
 		n, err := w.Write([]byte(http.StatusText(http.StatusOK)))
 		if err != nil {

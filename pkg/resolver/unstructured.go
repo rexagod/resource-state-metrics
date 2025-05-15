@@ -1,5 +1,5 @@
 /*
-Copyright 2024 The Kubernetes resource-state-metrics Authors.
+Copyright 2025 The Kubernetes resource-state-metrics Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -42,8 +42,7 @@ func NewUnstructuredResolver(logger klog.Logger) *UnstructuredResolver {
 // limitations: https://github.com/kubernetes/apimachinery/blob/v0.31.0/pkg/apis/meta/v1/unstructured/helpers_test.go#L121.
 func (ur *UnstructuredResolver) Resolve(query string, unstructuredObjectMap map[string]interface{}) map[string]string {
 	logger := ur.logger.WithValues("query", query)
-
-	resolvedI, found, err := unstructured.NestedFieldNoCopy(unstructuredObjectMap, strings.Split(query, ".")...)
+	gotResolved, found, err := unstructured.NestedFieldNoCopy(unstructuredObjectMap, strings.Split(query, ".")...)
 	if !found {
 		return map[string]string{query: query}
 	}
@@ -53,5 +52,5 @@ func (ur *UnstructuredResolver) Resolve(query string, unstructuredObjectMap map[
 		return map[string]string{query: query}
 	}
 
-	return map[string]string{query: fmt.Sprintf("%v", resolvedI)}
+	return map[string]string{query: fmt.Sprintf("%v", gotResolved)}
 }

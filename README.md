@@ -23,7 +23,7 @@ RTT:	3196ms
 Start developing by following these steps:
 
 - Set up dependencies with `make setup`.
-- Test out your changes with `make apply apply-testdata local`.
+- Test out your changes with `make apply apply_testdata local`.
   - Telemetry metrics, by default, are exposed on `:9998/metrics`.
   - Resource metrics, by default, are exposed on `:9999/metrics`.
 - Start a `pprof` interactive session with `make pprof`.

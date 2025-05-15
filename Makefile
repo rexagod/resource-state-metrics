@@ -8,20 +8,20 @@ BUILD_DATE ?= $(shell date -u +'%Y-%m-%dT%H:%M:%SZ')
 BUILD_TAG ?= $(shell git describe --tags --exact-match 2>/dev/null || echo "latest")
 CODE_GENERATOR_VERSION ?= v0.31.2
 COMMON = github.com/prometheus/common
-CONTROLLER_GEN ?= $(shell go env GOPATH)/bin/controller-gen
+CONTROLLER_GEN ?= $(shell which controller-gen)
 CONTROLLER_GEN_APIS_DIR ?= pkg/apis
 CONTROLLER_GEN_OUT_DIR ?= /tmp/resource-state-metrics/controller-gen
 CONTROLLER_GEN_VERSION ?= v0.16.5
 GIT_COMMIT = $(shell git rev-parse --short HEAD)
 GO ?= go
-GOLANGCI_LINT ?= $(shell go env GOPATH)/bin/golangci-lint
+GOLANGCI_LINT ?= $(shell which golangci-lint)
 GOLANGCI_LINT_CONFIG ?= .golangci.yaml
 GOLANGCI_LINT_VERSION ?= v1.62.0
 GO_FILES = $(shell find . -type d -name vendor -prune -o -type f -name "*.go" -print)
 KUBECTL ?= kubectl
 KUBESTATEMETRICS_CUSTOMRESOURCESTATE_CONFIG ?= tests/bench/kubestatemetrics-custom-resource-state-config.yaml
 LOCAL_NAMESPACE ?= default
-MARKDOWNFMT ?= $(shell go env GOPATH)/bin/markdownfmt
+MARKDOWNFMT ?= $(shell which markdownfmt)
 MARKDOWNFMT_VERSION ?= v3.1.0
 MD_FILES = $(shell find . \( -type d -name 'vendor' -o -type d -name $(patsubst %/,%,$(patsubst ./%,%,$(ASSETS_DIR))) \) -prune -o -type f -name "*.md" -print)
 PPROF_OPTIONS ?=
@@ -80,13 +80,13 @@ codegen:
 	@# Populate pkg/generated/.
 	@./hack/update-codegen.sh
 
-.PHONY: verify-codegen
-verify-codegen:
+.PHONY: verify_codegen
+verify_codegen:
 	@# Verify codegen.
 	@./hack/verify-codegen.sh
 
 .PHONY: generate
-generate: codegen manifests
+generate: manifests codegen
 
 ############
 # Building #
@@ -129,15 +129,15 @@ delete:
 	@$(KUBECTL) delete -f manifests/ || true
 	# Deleted manifests/
 
-.PHONY: apply-testdata
-apply-testdata: delete-testdata
+.PHONY: apply_testdata
+apply_testdata: delete_testdata
 	# Applying testdata/
 	@$(KUBECTL) apply -f testdata/custom-resource-definition/ && \
 	$(KUBECTL) apply -f testdata/custom-resource/
 	# Applied testdata/
 
-.PHONY: delete-testdata
-delete-testdata:
+.PHONY: delete_testdata
+delete_testdata:
 	# Deleting testdata/
 	@$(KUBECTL) delete -Rf testdata || true
 	# Deleted testdata/
@@ -157,7 +157,15 @@ pprof:
 
 .PHONY: test_unit
 test_unit:
-	@$(GO) test -race -short $(shell go list ./... | \
+	@$(GO) test $(shell go list ./... | \
+		grep -v "/generated" | \
+		grep -v "/signals" | \
+		grep -v "/tests" | \
+		grep -v "/version")
+
+.PHONY: test_race
+test_race:
+	@$(GO) test -race $(shell go list ./... | \
 		grep -v "/generated" | \
 		grep -v "/signals" | \
 		grep -v "/tests" | \
@@ -175,10 +183,10 @@ test_e2e:
 	timeout --signal SIGINT --preserve-status $(TEST_TIMEOUT) ./tests/run.sh
 
 .PHONY: test
-test: test_unit test_e2e
+test: test_unit test_race test_e2e
 
 .PHONY: bench
-bench: vet setup manifests codegen build apply apply-testdata
+bench: vet setup manifests codegen build apply apply_testdata
 	@\
 	GO=$(GO) \
 	KUBECONFIG=$(KUBECONFIG) \
@@ -188,7 +196,8 @@ bench: vet setup manifests codegen build apply apply-testdata
 	LOCAL_NAMESPACE=$(LOCAL_NAMESPACE) \
 	PROJECT_NAME=$(PROJECT_NAME) \
 	timeout --preserve-status $(BENCH_TIMEOUT) ./tests/bench/bench.sh
-	@make delete delete-testdata
+	@make delete delete_testdata
+
 ###########
 # Linting #
 ###########
@@ -212,26 +221,26 @@ markdownfmt: $(MD_FILES)
 markdownfmt-fix: $(MD_FILES)
 	@for file in $(MD_FILES); do markdownfmt -w -gofmt $$file || exit 1; done
 
-.PHONY: lint-md
-lint-md: vale markdownfmt
+.PHONY: lint_md
+lint_md: vale markdownfmt
 
-.PHONY: lint-md-fix
-lint-md-fix: vale markdownfmt-fix
+.PHONY: lint_md_fix
+lint_md_fix: vale markdownfmt-fix
 
-golangci-lint: $(GO_FILES)
+golangci_lint: $(GO_FILES)
 	@$(GOLANGCI_LINT) run -c $(GOLANGCI_LINT_CONFIG)
 
-golangci-lint-fix: $(GO_FILES)
+golangci_lint_fix: $(GO_FILES)
 	@$(GOLANGCI_LINT) run --fix -c $(GOLANGCI_LINT_CONFIG)
 
 .PHONY: lint-go
-lint-go: golangci-lint
+lint-go: golangci_lint
 
 .PHONY: lint-go-fix
-lint-go-fix: golangci-lint-fix
+lint-go-fix: golangci_lint_fix
 
 .PHONY: lint
-lint: lint-md lint-go
+lint: lint_md lint-go
 
 .PHONY: lint-fix
-lint-fix: lint-md-fix lint-go-fix
+lint-fix: lint_md_fix lint-go-fix

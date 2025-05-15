@@ -1,0 +1,3 @@
+# HELP openshift_clusterresourcequota_selector Selector of clusterresource quota, which defines the affected namespaces.
+# TYPE openshift_clusterresourcequota_selector gauge
+openshift_clusterresourcequota_selector{name="namespace1-clusterquota",type="match-labels",key="quota",value="namespace1-clusterquota"} 1

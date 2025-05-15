@@ -20,6 +20,8 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"strings"
+	"sync"
 
 	"github.com/google/cel-go/cel"
 	"github.com/google/cel-go/common/types"
@@ -30,7 +32,9 @@ import (
 
 // CELResolver represents a resolver for CEL expressions.
 type CELResolver struct {
-	logger klog.Logger
+	logger              klog.Logger
+	mutex               sync.Mutex
+	resolvedFieldParent string
 }
 
 // CELResolver implements the Resolver interface.
@@ -47,14 +51,10 @@ type costEstimator struct{}
 // costEstimator implements the ActualCostEstimator interface.
 var _ interpreter.ActualCostEstimator = costEstimator{}
 
-// CallCost helps set the runtime cost for CEL queries on a per-function basis. This affects `ActualCost()` directly.
-// function: The function name.
-// args: The arguments passed to the function.
-// result: The return value of the function.
-func (ce costEstimator) CallCost(function, _ string, _ []ref.Val, _ ref.Val) *uint64 {
-	estimatedCost := uint64(1)
+// CallCost sets the runtime cost for CEL queries on a per-function basis.
+func (ce costEstimator) CallCost(function string, _ string, _ []ref.Val, _ ref.Val) *uint64 {
 	customFunctionsCosts := map[string]uint64{}
-	estimatedCost += customFunctionsCosts[function]
+	estimatedCost := 1 + customFunctionsCosts[function]
 
 	return &estimatedCost
 }
@@ -62,86 +62,88 @@ func (ce costEstimator) CallCost(function, _ string, _ []ref.Val, _ ref.Val) *ui
 // Resolve resolves the given query against the given unstructured object.
 func (cr *CELResolver) Resolve(query string, unstructuredObjectMap map[string]interface{}) map[string]string {
 	logger := cr.logger.WithValues("query", query)
-
-	// Create a custom CEL environment.
-	env, err := cel.NewEnv(
-		cel.CrossTypeNumericComparisons(true),
-		cel.DefaultUTCTimeZone(true),
-		cel.EagerlyValidateDeclarations(true),
-	)
+	env, err := cr.createEnvironment()
 	if err != nil {
-		logger.Error(fmt.Errorf("error creating CEL environment: %w", err), "ignoring resolution for query")
+		logger.Error(err, "ignoring resolution for query")
 
-		return map[string]string{query: query}
+		return cr.defaultMapping(query)
 	}
 
-	// Parse.
 	ast, iss := env.Parse(query)
 	if iss.Err() != nil {
 		logger.Error(fmt.Errorf("error parsing CEL query: %w", iss.Err()), "ignoring resolution for query")
 
-		return map[string]string{query: query}
+		return cr.defaultMapping(query)
 	}
 
-	// Compile.
-	// costLimit gives ~0.1s for each CEL expression validation call.
+	program, err := cr.compileProgram(env, ast)
+	if err != nil {
+		logger.Error(err, "ignoring resolution for query")
+
+		return cr.defaultMapping(query)
+	}
+
+	out, evalDetails, err := cr.evaluateProgram(program, unstructuredObjectMap)
+	logger = cr.addCostLogging(logger, evalDetails)
+	if err != nil {
+		logger.V(1).Info("ignoring resolution for query", "info", err)
+
+		return cr.defaultMapping(query)
+	}
+
+	return cr.processResult(query, out)
+}
+
+func (cr *CELResolver) createEnvironment() (*cel.Env, error) {
+	return cel.NewEnv(
+		cel.CrossTypeNumericComparisons(true),
+		cel.DefaultUTCTimeZone(true),
+		cel.EagerlyValidateDeclarations(true),
+	)
+}
+
+func (cr *CELResolver) compileProgram(env *cel.Env, ast *cel.Ast) (cel.Program, error) {
 	const costLimit = 1000000
-	var program cel.Program
-	program, err = env.Program(
+
+	return env.Program(
 		ast,
 		cel.CostLimit(costLimit),
 		cel.CostTracking(new(costEstimator)),
 	)
-	if err != nil {
-		logger.Error(fmt.Errorf("error compiling CEL query: %w", err), "ignoring resolution for query")
+}
 
-		return map[string]string{query: query}
-	}
+func (cr *CELResolver) evaluateProgram(program cel.Program, obj map[string]interface{}) (ref.Val, *cel.EvalDetails, error) {
+	return program.Eval(map[string]interface{}{"o": obj})
+}
 
-	// Inject the object and evaluate.
-	var out ref.Val
-	var evalDetails *cel.EvalDetails
-	out, evalDetails, err = program.Eval(map[string]interface{}{
-		"o" /* Queries will follow the format: o.<A>.<AB>.<ABC>... */ : unstructuredObjectMap,
-	})
-	logger = logger.WithValues(
-		"costLimit", costLimit,
-	)
+func (cr *CELResolver) addCostLogging(logger klog.Logger, evalDetails *cel.EvalDetails) klog.Logger {
+	logger = logger.WithValues("costLimit", 1000000)
 	if evalDetails != nil {
-		logger = logger.WithValues(
-			"queryCost", *evalDetails.ActualCost(),
-		)
-	}
-	if err != nil {
-		logger.V(1).Info("ignoring resolution for query", "info", err)
-
-		return map[string]string{query: query}
+		logger = logger.WithValues("queryCost", *evalDetails.ActualCost())
 	}
 	logger.V(4).Info("CEL query runtime cost")
 
-	mapper := map[string]string{}
+	return logger
+}
+
+func (cr *CELResolver) processResult(query string, out ref.Val) map[string]string {
+	cr.mutex.Lock()
+	cr.resolvedFieldParent = query[strings.LastIndex(query, ".")+1:]
+	cr.mutex.Unlock()
 	switch out.Type() {
 	case types.BoolType, types.DoubleType, types.IntType, types.StringType, types.UintType:
-
-		// If the output is a primitive type, return the query and the resolved value.
-		mapper = map[string]string{query: fmt.Sprintf("%v", out.Value())}
+		return map[string]string{query: fmt.Sprintf("%v", out.Value())}
 	case types.MapType:
-		mapper = cr.resolveMap(&out)
+		return cr.resolveMap(&out)
 	case types.ListType:
-		mapper = cr.resolveList(&out)
+		return cr.resolveList(&out)
 	case types.NullType:
-		// The `unstructured.NestedFieldNoCopy` function returns "<nil>" for nil values.
-		// Hence, we do this for conformance between different resolvers.
-		mapper = map[string]string{query: "<nil>"}
+		return map[string]string{query: "<nil>"}
 	default:
-		logger.Error(fmt.Errorf("unsupported output type %q", out.Type()), "ignoring resolution for query")
-	}
+		cr.logger.Error(fmt.Errorf("unsupported output type %q", out.Type()), "ignoring resolution for query")
 
-	if len(mapper) == 0 {
-		mapper = map[string]string{query: query}
+		return cr.defaultMapping(query)
 	}
-
-	return mapper
 }
 
 func (cr *CELResolver) resolveList(out *ref.Val) map[string]string {
@@ -152,14 +154,7 @@ func (cr *CELResolver) resolveList(out *ref.Val) map[string]string {
 
 		return nil
 	}
-	for i, v := range outList {
-		switch v.(type) {
-		case string, int, uint, float64, bool:
-			m[strconv.Itoa(i)] = fmt.Sprintf("%v", v)
-		default:
-			cr.logger.V(1).Error(fmt.Errorf("encountered composite value %q at index %d, skipping", v, i), "ignoring resolution for query")
-		}
-	}
+	cr.resolveListInner(outList, m)
 
 	return m
 }
@@ -172,16 +167,44 @@ func (cr *CELResolver) resolveMap(out *ref.Val) map[string]string {
 
 		return nil
 	}
-	for k, v := range outMap {
-		switch v.(type) {
-		case string, int, uint, float64, bool:
+	cr.resolveMapInner(outMap, m)
 
-			// Even in cases where the parent and immediate child have the same key, the "o" prefix in CEL queries will prevent any collision.
-			m[k] = fmt.Sprintf("%v", v)
+	return m
+}
+
+func (cr *CELResolver) resolveListInner(list []interface{}, out map[string]string) {
+	for i, v := range list {
+		switch v := v.(type) {
+		case string, int, uint, float64, bool:
+			out[cr.resolvedFieldParent+"#"+strconv.Itoa(i)] = fmt.Sprintf("%v", v)
+		case []interface{}:
+			cr.resolveListInner(v, out)
+		case map[string]interface{}:
+			cr.resolveMapInner(v, out)
+		default:
+			cr.logger.V(1).Error(fmt.Errorf("encountered composite value %q at index %d, skipping", v, i), "ignoring resolution for query")
+		}
+	}
+}
+
+func (cr *CELResolver) resolveMapInner(m map[string]interface{}, out map[string]string) {
+	for k, v := range m {
+		cr.mutex.Lock()
+		cr.resolvedFieldParent = k
+		cr.mutex.Unlock()
+		switch v := v.(type) {
+		case string, int, uint, float64, bool:
+			out[k] = fmt.Sprintf("%v", v)
+		case []interface{}:
+			cr.resolveListInner(v, out)
+		case map[string]interface{}:
+			cr.resolveMapInner(v, out)
 		default:
 			cr.logger.V(1).Error(fmt.Errorf("encountered composite value %q at key %q, skipping", v, k), "ignoring resolution for query")
 		}
 	}
+}
 
-	return m
+func (cr *CELResolver) defaultMapping(query string) map[string]string {
+	return map[string]string{query: query}
 }

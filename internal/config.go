@@ -1,5 +1,5 @@
 /*
-Copyright 2024 The Kubernetes resource-state-metrics Authors.
+Copyright 2025 The Kubernetes resource-state-metrics Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -27,11 +27,9 @@ import (
 	"k8s.io/client-go/dynamic"
 )
 
-// configure defines behaviours for working with configuration(s), can be implemented to use configurations other than
-// the CEL one.
+// configure defines behaviours for working with configuration(s).
 type configure interface {
-
-	// Parse parses the given configuration.
+	// parse parses the given configuration.
 	parse(raw string) error
 
 	// build builds the given configuration.
@@ -45,63 +43,66 @@ type configuration struct {
 
 // configurer knows how to parse a YAML configuration.
 type configurer struct {
-
-	// configuration is the structured configuration.
-	configuration configuration
-
-	// dynamicClientset is the dynamic clientset used to build stores for different objects.
+	configuration    configuration
 	dynamicClientset dynamic.Interface
-
-	// resource is the resource to build stores for.
-	resource *v1alpha1.ResourceMetricsMonitor
+	resource         *v1alpha1.ResourceMetricsMonitor
 }
 
-// configurer implements the configure interface.
+// Ensure configurer implements configure.
 var _ configure = &configurer{}
 
 // newConfigurer returns a new configurer.
-func newConfigurer(
-	dynamicClientset dynamic.Interface,
-	resource *v1alpha1.ResourceMetricsMonitor,
-) *configurer {
+func newConfigurer(dynamicClientset dynamic.Interface, resource *v1alpha1.ResourceMetricsMonitor) *configurer {
 	return &configurer{
 		dynamicClientset: dynamicClientset,
 		resource:         resource,
 	}
 }
 
-// parse knows how to parse the given configuration.
+// parse unmarshals the raw YAML configuration.
 func (c *configurer) parse(raw string) error {
-	err := yaml.Unmarshal([]byte(raw), &c.configuration)
-	if err != nil {
-		err = fmt.Errorf("error unmarshalling configuration: %w", err)
+	if err := yaml.Unmarshal([]byte(raw), &c.configuration); err != nil {
+		return fmt.Errorf("error unmarshalling configuration: %w", err)
 	}
 
-	return err
+	return nil
 }
 
-// build knows how to build the given configuration.
+// build constructs the metric stores from the parsed configuration.
 func (c *configurer) build(ctx context.Context, uidToStoresMap map[types.UID][]*StoreType, tryNoCache bool) {
-	for _, storeConfiguration := range c.configuration.Stores {
-		g, v, k, r := storeConfiguration.Group, storeConfiguration.Version, storeConfiguration.Kind, storeConfiguration.ResourceName
-		gvkWithR := gvkr{
-			GroupVersionKind:     schema.GroupVersionKind{Group: g, Version: v, Kind: k},
-			GroupVersionResource: schema.GroupVersionResource{Group: g, Version: v, Resource: r},
-		}
-		ls, fs := storeConfiguration.Selectors.Label, storeConfiguration.Selectors.Field
-		families := storeConfiguration.Families
-		resolver := storeConfiguration.Resolver
-		labelKeys, labelValues := storeConfiguration.LabelKeys, storeConfiguration.LabelValues
-		s := buildStore(
-			ctx, c.dynamicClientset,
-			gvkWithR,
-			families,
-			tryNoCache,
-			ls, fs,
-			resolver,
-			labelKeys, labelValues,
-		)
+	for _, cfg := range c.configuration.Stores {
+		s := c.buildStoreFromConfig(ctx, cfg, tryNoCache)
 		resourceUID := c.resource.GetUID()
 		uidToStoresMap[resourceUID] = append(uidToStoresMap[resourceUID], s)
+	}
+}
+
+func (c *configurer) buildStoreFromConfig(ctx context.Context, cfg *StoreType, tryNoCache bool) *StoreType {
+	gvkWithR := buildGVKR(cfg)
+
+	return buildStore(
+		ctx,
+		c.dynamicClientset,
+		gvkWithR,
+		cfg.Families,
+		tryNoCache,
+		cfg.Selectors.Label, cfg.Selectors.Field,
+		cfg.Resolver,
+		cfg.LabelKeys, cfg.LabelValues,
+	)
+}
+
+func buildGVKR(cfg *StoreType) gvkr {
+	return gvkr{
+		GroupVersionKind: schema.GroupVersionKind{
+			Group:   cfg.Group,
+			Version: cfg.Version,
+			Kind:    cfg.Kind,
+		},
+		GroupVersionResource: schema.GroupVersionResource{
+			Group:    cfg.Group,
+			Version:  cfg.Version,
+			Resource: cfg.ResourceName,
+		},
 	}
 }

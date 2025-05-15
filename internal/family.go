@@ -1,5 +1,5 @@
 /*
-Copyright 2024 The Kubernetes resource-state-metrics Authors.
+Copyright 2025 The Kubernetes resource-state-metrics Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -19,6 +19,7 @@ package internal
 import (
 	"fmt"
 	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/iancoleman/strcase"
@@ -28,12 +29,10 @@ import (
 )
 
 const (
-
 	// metricTypeGauge represents the type of metric. This is pinned to `gauge` to avoid ingestion issues with different backends
 	// (Prometheus primarily) that may not recognize all metrics under the OpenMetrics spec. This also helps upkeep a more
 	// consistent configuration. Refer https://github.com/kubernetes/kube-state-metrics/pull/2270 for more details.
 	metricTypeGauge = "gauge"
-
 	// In convention with kube-state-metrics, we prefix all metrics with `kube_customresource_` to explicitly denote
 	// that these are custom resource user-generated metrics (and have no stability).
 	kubeCustomResourcePrefix = "kube_customresource_"
@@ -43,59 +42,31 @@ const (
 type ResolverType string
 
 const (
-
-	// ResolverTypeCEL represents the CEL resolver.
-	ResolverTypeCEL ResolverType = "cel"
-
-	// ResolverTypeUnstructured represents the Unstructured resolver.
+	ResolverTypeCEL          ResolverType = "cel"
 	ResolverTypeUnstructured ResolverType = "unstructured"
-
-	// ResolverTypeNone represents an empty resolver.
-	ResolverTypeNone ResolverType = ""
+	ResolverTypeNone         ResolverType = ""
 )
 
 // FamilyType represents a metric family (a group of metrics with the same name).
 type FamilyType struct {
-
-	// logger is the family's logger.
-	logger klog.Logger
-
-	// Name is the Name of the metric family.
-	Name string `yaml:"name"`
-
-	// Help is the Help text for the metric family.
-	Help string `yaml:"help"`
-
-	// t is the type of the metric family.
-	// NOTE: This will always be pinned to `gauge`, and thus not exported for unmarshalling.
-	t string
-
-	// Metrics is a slice of Metrics that belong to the MetricType family.
-	Metrics []*MetricType `yaml:"metrics"`
-
-	// Resolver is the resolver to use to evaluate the labelset expressions.
-	Resolver ResolverType `yaml:"resolver"`
-
-	// LabelKeys is the set of inherited or defined label keys.
-	LabelKeys []string `yaml:"labelKeys,omitempty"`
-
-	// LabelValues is the set of inherited or defined label values.
-	LabelValues []string `yaml:"labelValues,omitempty"`
+	logger      klog.Logger
+	Name        string        `yaml:"name"`
+	Help        string        `yaml:"help"`
+	Metrics     []*MetricType `yaml:"metrics"`
+	Resolver    ResolverType  `yaml:"resolver"`
+	LabelKeys   []string      `yaml:"labelKeys,omitempty"`
+	LabelValues []string      `yaml:"labelValues,omitempty"`
 }
 
 // buildMetricString returns the given family in its byte representation.
 func (f *FamilyType) buildMetricString(unstructured *unstructured.Unstructured) string {
 	logger := f.logger.WithValues("family", f.Name)
-
 	familyRawBuilder := strings.Builder{}
+
 	for _, metric := range f.Metrics {
 		metricRawBuilder := strings.Builder{}
 
-		// Inherit the label keys and values.
-		metric.LabelKeys = append(metric.LabelKeys, f.LabelKeys...)
-		metric.LabelValues = append(metric.LabelValues, f.LabelValues...)
-
-		// Inherit the resolver.
+		inheritMetricAttributes(f, metric)
 		resolverInstance, err := f.resolver(metric.Resolver)
 		if err != nil {
 			logger.V(1).Error(fmt.Errorf("error resolving metric: %w", err), "skipping")
@@ -103,36 +74,8 @@ func (f *FamilyType) buildMetricString(unstructured *unstructured.Unstructured) 
 			continue
 		}
 
-		// Resolve the labelset.
-		var (
-			resolvedLabelKeys   []string
-			resolvedLabelValues []string
-		)
-		for i, query := range metric.LabelValues {
-			resolvedLabelset := resolverInstance.Resolve(query, unstructured.Object)
+		resolvedLabelKeys, resolvedLabelValues, resolvedExpandedLabelSet := resolveLabels(metric, resolverInstance, unstructured.Object)
 
-			// If the query is found in the resolved labelset, append the resolved value.
-			if resolvedLabelValue, ok := resolvedLabelset[query]; ok {
-				resolvedLabelValues = append(resolvedLabelValues, resolvedLabelValue)
-
-				// Label keys are not resolved if the returned labelset for the same label key exists.
-				resolvedLabelKeys = append(resolvedLabelKeys, strings.ToLower(regexp.MustCompile(`\W`).
-					ReplaceAllString(metric.LabelKeys[i], "_")))
-
-				// If the query is not found in the resolved labelset, it is now redundant as a label value.
-			} else {
-				for k, v := range resolvedLabelset {
-					resolvedLabelValues = append(resolvedLabelValues, v)
-
-					// Label keys are resolved (with the original label keys being the new label key's prefix) if the
-					// returned labelset for the same label key does not exist.
-					resolvedLabelKeys = append(resolvedLabelKeys, strcase.ToLowerCamel(regexp.MustCompile(`\W`).
-						ReplaceAllString(metric.LabelKeys[i]+k, "_")))
-				}
-			}
-		}
-
-		// Resolve the metric value.
 		resolvedValue, found := resolverInstance.Resolve(metric.Value, unstructured.Object)[metric.Value]
 		if !found {
 			logger.V(1).Error(fmt.Errorf("error resolving metric value %q", metric.Value), "skipping")
@@ -140,29 +83,135 @@ func (f *FamilyType) buildMetricString(unstructured *unstructured.Unstructured) 
 			continue
 		}
 
-		// Write the metric.
-		metricRawBuilder.WriteString(kubeCustomResourcePrefix)
-		metricRawBuilder.WriteString(f.Name)
-		err = writeMetricTo(
-			&metricRawBuilder,
-			unstructured.GroupVersionKind().Group, unstructured.GroupVersionKind().Version, unstructured.GroupVersionKind().Kind,
-			resolvedValue,
-			resolvedLabelKeys, resolvedLabelValues,
-		)
+		err = writeMetricSamples(&metricRawBuilder, f.Name, unstructured, resolvedLabelKeys, resolvedLabelValues, resolvedExpandedLabelSet, resolvedValue, logger)
 		if err != nil {
-			logger.V(1).Error(fmt.Errorf("error writing metric: %w", err), "skipping")
-
 			continue
 		}
-
 		familyRawBuilder.WriteString(metricRawBuilder.String())
 	}
 
 	return familyRawBuilder.String()
 }
 
+// inheritMetricAttributes applies family-level labels and resolver to the metric.
+func inheritMetricAttributes(f *FamilyType, metric *MetricType) {
+	metric.LabelKeys = append(metric.LabelKeys, f.LabelKeys...)
+	metric.LabelValues = append(metric.LabelValues, f.LabelValues...)
+}
+
+// resolveLabels resolves label keys and values including handling of composite map/list structures.
+func resolveLabels(metric *MetricType, resolverInstance resolver.Resolver, obj map[string]interface{}) ([]string, []string, map[string][]string) {
+	var (
+		resolvedLabelKeys        []string
+		resolvedLabelValues      []string
+		resolvedExpandedLabelSet = make(map[string][]string)
+	)
+
+	for queryIndex, query := range metric.LabelValues {
+		resolvedLabelset := resolverInstance.Resolve(query, obj)
+		// If the query is found in the resolved labelset, it means we are dealing with non-composite value(s).
+		// For e.g., consider:
+		// * `name: o.metadata.name` -> `o.metadata.name: foo`
+		// * `v: o.spec.versions` -> `v#0: [v1, v2]` // no `o.spec.versions` in the resolved labelset
+		if val, ok := resolvedLabelset[query]; ok {
+			resolvedLabelValues = append(resolvedLabelValues, val)
+			resolvedLabelKeys = append(resolvedLabelKeys, sanitizeKey(metric.LabelKeys[queryIndex]))
+		} else {
+			for k, v := range resolvedLabelset {
+				// Check if key has a suffix that satisfies the regex: "#\d+".
+				// This is used to identify list values in way that's resolver-agnostic.
+				if regexp.MustCompile(`.+#\d+`).MatchString(k) {
+					key := k[:strings.LastIndex(k, "#")]
+					// If `o.spec.tags` is a list, the labelset will look like `metric_name{tags="tagX"}`,
+					// where the number of generated samples will be same as the length of the list.
+					resolvedExpandedLabelSet[key] = append(resolvedExpandedLabelSet[key], v)
+
+					continue
+				}
+				resolvedLabelValues = append(resolvedLabelValues, v)
+				resolvedLabelKeys = append(resolvedLabelKeys, sanitizeKey(metric.LabelKeys[queryIndex]+k))
+			}
+		}
+	}
+
+	return resolvedLabelKeys, resolvedLabelValues, resolvedExpandedLabelSet
+}
+
+// sanitizeKey converts a label key to snake_case and strips non-alphanumeric characters.
+func sanitizeKey(s string) string {
+	return strcase.ToSnake(regexp.MustCompile(`\W`).ReplaceAllString(s, "_"))
+}
+
+// writeMetricSamples writes single or expanded metric values based on label structure.
+func writeMetricSamples(builder *strings.Builder, name string, u *unstructured.Unstructured, keys, values []string, expanded map[string][]string, value string, logger klog.Logger) error {
+	writeMetric := func(k, v []string) error {
+		builder.WriteString(kubeCustomResourcePrefix + name)
+
+		return writeMetricTo(
+			builder,
+			u.GroupVersionKind().Group,
+			u.GroupVersionKind().Version,
+			u.GroupVersionKind().Kind,
+			value,
+			k, v,
+		)
+	}
+	if len(expanded) == 0 {
+		return writeSingleSample(writeMetric, keys, values, logger)
+	}
+
+	return writeExpandedSamples(writeMetric, keys, values, expanded, logger)
+}
+
+// writeSingleSample writes a single metric sample.
+func writeSingleSample(writeFunc func([]string, []string) error, keys, values []string, logger klog.Logger) error {
+	if err := writeFunc(keys, values); err != nil {
+		logger.V(1).Error(fmt.Errorf("error writing metric: %w", err), "skipping")
+
+		return err
+	}
+
+	return nil
+}
+
+// writeExpandedSamples writes metric samples for list-based label values.
+func writeExpandedSamples(writeFunc func([]string, []string) error, labelKeys, labelValues []string, expanded map[string][]string, logger klog.Logger) error {
+	var seriesToGenerate int
+
+	for k := range expanded {
+		labelKeys = append(labelKeys, k)
+		if len(expanded[k]) > seriesToGenerate {
+			seriesToGenerate = len(expanded[k])
+		}
+		slices.Sort(expanded[k])
+	}
+
+	for range seriesToGenerate {
+		ephemeralLabelValues := labelValues
+		// Don't iterate over the `expanded` map, as the order of keys is unstable.
+		expansionKeys := labelKeys[len(labelKeys)-len(expanded):]
+		for _, k := range expansionKeys {
+			vs := expanded[k]
+			if len(vs) == 0 {
+				ephemeralLabelValues = append(ephemeralLabelValues, "")
+
+				continue
+			}
+			ephemeralLabelValues = append(ephemeralLabelValues, vs[0])
+			expanded[k] = vs[1:]
+		}
+		// Pass a copy of the label keys and values to avoid modifying the original slices.
+		if err := writeFunc(slices.Clone(labelKeys), slices.Clone(ephemeralLabelValues)); err != nil {
+			logger.V(1).Error(fmt.Errorf("error writing metric: %w", err), "skipping")
+
+			return err
+		}
+	}
+
+	return nil
+}
+
 func (f *FamilyType) resolver(inheritedResolver ResolverType) (resolver.Resolver, error) {
-	var resolverInstance resolver.Resolver
 	if inheritedResolver == ResolverTypeNone {
 		inheritedResolver = f.Resolver
 	}
@@ -170,35 +219,20 @@ func (f *FamilyType) resolver(inheritedResolver ResolverType) (resolver.Resolver
 	case ResolverTypeNone:
 		fallthrough // Default to Unstructured resolver.
 	case ResolverTypeUnstructured:
-		resolverInstance = resolver.NewUnstructuredResolver(f.logger)
+		return resolver.NewUnstructuredResolver(f.logger), nil
 	case ResolverTypeCEL:
-		resolverInstance = resolver.NewCELResolver(f.logger)
+		return resolver.NewCELResolver(f.logger), nil
 	default:
 		return nil, fmt.Errorf("error resolving metric: unknown resolver %q", inheritedResolver)
 	}
-
-	return resolverInstance, nil
 }
 
 // buildHeaders generates the header for the given family.
 func (f *FamilyType) buildHeaders() string {
 	header := strings.Builder{}
-
-	// Write the help text.
-	header.WriteString("# HELP ")
-	header.WriteString(kubeCustomResourcePrefix)
-	header.WriteString(f.Name)
-	header.WriteString(" ")
-	header.WriteString(f.Help)
+	header.WriteString("# HELP " + kubeCustomResourcePrefix + f.Name + " " + f.Help)
 	header.WriteString("\n")
-
-	// Write the type text.
-	header.WriteString("# TYPE ")
-	header.WriteString(kubeCustomResourcePrefix)
-	header.WriteString(f.Name)
-	header.WriteString(" ")
-	f.t = metricTypeGauge
-	header.WriteString(f.t)
+	header.WriteString("# TYPE " + kubeCustomResourcePrefix + f.Name + " " + metricTypeGauge)
 
 	return header.String()
 }
