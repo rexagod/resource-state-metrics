@@ -20,11 +20,11 @@ type StoreType struct {
 	headers []string
 
 	// Configuration fields unmarshalled from YAML
-	Group        string `yaml:"g"`
-	Version      string `yaml:"v"`
-	Kind         string `yaml:"k"`
-	ResourceName string `yaml:"r"`
-	Selectors    struct {
+	Group     string `yaml:"group"`
+	Version   string `yaml:"version"`
+	Kind      string `yaml:"kind"`
+	Resource  string `yaml:"resource"`
+	Selectors struct {
 		Label string `yaml:"label,omitempty"`
 		Field string `yaml:"field,omitempty"`
 	} `yaml:"selectors,omitempty"`

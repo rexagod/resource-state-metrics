@@ -21,7 +21,6 @@ import (
 	stderrors "errors"
 	"fmt"
 	"net"
-	"os"
 	"reflect"
 	"strconv"
 	"time"
@@ -72,7 +71,7 @@ func NewController(ctx context.Context, options *Options, kubeClientset kubernet
 	eventBroadcaster := record.NewBroadcaster()
 	eventBroadcaster.StartStructuredLogging(0)
 	eventBroadcaster.StartRecordingToSink(&typedcorev1.EventSinkImpl{
-		Interface: kubeClientset.CoreV1().Events(os.Getenv("EMIT_NAMESPACE")),
+		Interface: kubeClientset.CoreV1().Events(metav1.NamespaceNone),
 	})
 	recorder := eventBroadcaster.NewRecorder(scheme.Scheme, corev1.EventSource{Component: version.ControllerName.String()})
 

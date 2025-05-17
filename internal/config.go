@@ -102,7 +102,7 @@ func buildGVKR(cfg *StoreType) gvkr {
 		GroupVersionResource: schema.GroupVersionResource{
 			Group:    cfg.Group,
 			Version:  cfg.Version,
-			Resource: cfg.ResourceName,
+			Resource: cfg.Resource,
 		},
 	}
 }

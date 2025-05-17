@@ -19,13 +19,12 @@ metadata:
   namespace: default
 spec:
   # NOTE: "unstructured" is the default resolver.
-  # TODO: Add sample labelKeys and labelValues at the top-level in this example.
   configuration: |-
     stores:
-      - g: "contoso.com"
-        v: "v1alpha1"
-        k: "MyPlatform"
-        r: "myplatforms"
+      - group: "contoso.com"
+        version: "v1alpha1"
+        kind: "MyPlatform"
+        resource: "myplatforms"
         selectors:
           field: "metadata.namespace=default"
         families:
@@ -55,10 +54,10 @@ spec:
                   - "metadata.name"
                   - "metadata.labels"
                 value: "spec.replicas"
-      - g: "samplecontroller.k8s.io"
-        v: "v1alpha1"
-        k: "Foo"
-        r: "foos"
+      - group: "samplecontroller.k8s.io"
+        version: "v1alpha1"
+        kind: "Foo"
+        resource: "foos"
         selectors:
           label: "app.kubernetes.io/part-of=sample-controller"
         families:
@@ -86,10 +85,10 @@ spec:
                   - "metadata.name"
                 value: "spec.replicas"
       - resolver: "cel"
-        g: "contoso.com"
-        v: "v1alpha1"
-        k: "MyPlatform"
-        r: "myplatforms"
+        group: "contoso.com"
+        version: "v1alpha1"
+        kind: "MyPlatform"
+        resource: "myplatforms"
         labelKeys:
           - "job"
         labelValues:
