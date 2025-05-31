@@ -4,7 +4,7 @@ import (
 	"io"
 
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/kube-state-metrics/pkg/collector"
+	metricsstore "k8s.io/kube-state-metrics/v2/pkg/metrics_store"
 )
 
 // collectors defines behaviors to implement custom Go-based collectors for the "main" instance.
@@ -13,7 +13,7 @@ type gvkr struct {
 	schema.GroupVersionResource
 }
 type collectors interface {
-	BuildCollector(kubeconfig string) *collector.Collector
+	BuildCollector(kubeconfig string) *metricsstore.MetricsStore
 	GVKR() gvkr
 	Register()
 }
@@ -21,7 +21,7 @@ type collectors interface {
 type collectorsType struct {
 	kubeconfig      string
 	collectors      []collectors
-	builtCollectors []*collector.Collector
+	builtCollectors []*metricsstore.MetricsStore
 }
 
 func (ct *collectorsType) SetKubeConfig(kubeconfig string) *collectorsType {
@@ -43,7 +43,8 @@ func (ct *collectorsType) Build() {
 
 func (ct *collectorsType) Write(w io.Writer) {
 	for _, c := range ct.builtCollectors {
-		c.Collect(w)
+		mw := metricsstore.NewMetricsWriter(c)
+		_ = mw.WriteAll(w)
 	}
 }
 
