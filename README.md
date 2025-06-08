@@ -56,5 +56,6 @@ In the order of priority:
   - [ ] garbage collection (without `finalizers`), since currently the namespace-scoped deployment manages its cluster-scoped resources.
 - [ ] Meta-metrics for metric generation failures.
 - [ ] Dynamic admission control for `ResourceMetricsMonitor` CRD.
+- [ ] [`s/stores/generators`](https://github.com/kubernetes/enhancements/pull/4811#discussion_r2121842302)
 
 ###### [License](./LICENSE)
