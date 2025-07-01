@@ -13,9 +13,9 @@ import (
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/klog/v2"
-	"k8s.io/kube-state-metrics/pkg/collector"
-	"k8s.io/kube-state-metrics/pkg/metric"
-	metricsstore "k8s.io/kube-state-metrics/pkg/metrics_store"
+	"k8s.io/kube-state-metrics/v2/pkg/metric"
+	generator "k8s.io/kube-state-metrics/v2/pkg/metric_generator"
+	metricsstore "k8s.io/kube-state-metrics/v2/pkg/metrics_store"
 )
 
 // clusterResourceQuotaCollector implements the collectors interface.
@@ -35,13 +35,13 @@ func (c *clusterResourceQuotaCollector) GVKR() gvkr {
 	}
 }
 
-func (c *clusterResourceQuotaCollector) BuildCollector(kubeconfig string) *collector.Collector {
-	quotaMetricFamilies := []metric.FamilyGenerator{
+func (c *clusterResourceQuotaCollector) BuildCollector(kubeconfig string) *metricsstore.MetricsStore {
+	quotaMetricFamilies := []generator.FamilyGenerator{
 		{
 			Name: "openshift_clusterresourcequota_selector",
-			Type: metric.MetricTypeGauge,
+			Type: metric.Gauge,
 			Help: "Selector of clusterresource quota, which defines the affected namespaces.",
-			GenerateFunc: wrapClusterResourceQuotaFunc(func(r *v1.ClusterResourceQuota) metric.Family {
+			GenerateFunc: wrapClusterResourceQuotaFunc(func(r *v1.ClusterResourceQuota) *metric.Family {
 				family := metric.Family{}
 
 				sel := r.Spec.Selector
@@ -75,14 +75,14 @@ func (c *clusterResourceQuotaCollector) BuildCollector(kubeconfig string) *colle
 					}
 				}
 
-				return family
+				return &family
 			}),
 		},
 	}
 
 	store := metricsstore.NewMetricsStore(
-		metric.ExtractMetricFamilyHeaders(quotaMetricFamilies),
-		metric.ComposeMetricGenFuncs(quotaMetricFamilies),
+		generator.ExtractMetricFamilyHeaders(quotaMetricFamilies),
+		generator.ComposeMetricGenFuncs(quotaMetricFamilies),
 	)
 
 	for _, ns := range []string{metav1.NamespaceAll} {
@@ -91,16 +91,16 @@ func (c *clusterResourceQuotaCollector) BuildCollector(kubeconfig string) *colle
 		go reflector.Run(context.TODO().Done())
 	}
 
-	return collector.NewCollector(store)
+	return store
 }
 
-func wrapClusterResourceQuotaFunc(f func(config *v1.ClusterResourceQuota) metric.Family) func(interface{}) metric.Family {
-	return func(obj interface{}) metric.Family {
+func wrapClusterResourceQuotaFunc(f func(config *v1.ClusterResourceQuota) *metric.Family) func(interface{}) *metric.Family {
+	return func(obj interface{}) *metric.Family {
 		quota, ok := obj.(*v1.ClusterResourceQuota)
 		if !ok {
 			klog.Errorf("unexpected type %T when processing ClusterResourceQuota", obj)
 
-			return metric.Family{}
+			return &metric.Family{}
 		}
 		metricFamily := f(quota)
 
