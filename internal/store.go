@@ -20,35 +20,26 @@ type StoreType struct {
 	headers []string
 
 	// Configuration fields unmarshalled from YAML
-	Group     string `yaml:"group"`
-	Version   string `yaml:"version"`
-	Kind      string `yaml:"kind"`
-	Resource  string `yaml:"resource"`
-	Selectors struct {
-		Label string `yaml:"label,omitempty"`
-		Field string `yaml:"field,omitempty"`
-	} `yaml:"selectors,omitempty"`
-	Families    []*FamilyType `yaml:"families"`
-	Resolver    ResolverType  `yaml:"resolver"`
-	LabelKeys   []string      `yaml:"labelKeys,omitempty"`
-	LabelValues []string      `yaml:"labelValues,omitempty"`
+	Group      string        `yaml:"group"`
+	Version    string        `yaml:"version"`
+	Kind       string        `yaml:"kind"`
+	Resource   string        `yaml:"resource"`
+	Families   []*FamilyType `yaml:"families"`
+	AddonStubs []string      `yaml:"addonStubs,omitempty"`
 }
 
 func newStore(
 	logger klog.Logger,
 	headers []string,
 	families []*FamilyType,
-	resolver ResolverType,
-	labelKeys []string, labelValues []string,
+	addonStubs []string,
 ) *StoreType {
 	return &StoreType{
-		logger:      logger,
-		metrics:     map[types.UID][]string{},
-		headers:     headers,
-		Families:    families,
-		Resolver:    resolver,
-		LabelKeys:   labelKeys,
-		LabelValues: labelValues,
+		logger:     logger,
+		metrics:    map[types.UID][]string{},
+		headers:    headers,
+		Families:   families,
+		AddonStubs: addonStubs,
 	}
 }
 
@@ -117,7 +108,7 @@ func (s *StoreType) generateMetricsForObject(obj *unstructured.Unstructured) []s
 		inheritFamilyConfiguration(family, s)
 
 		family.logger = s.logger
-		metrics[i] = family.buildMetricString(obj)
+		metrics[i] = family.buildMetrics(obj)
 
 		s.logger.V(4).Info("Add", "family", family.Name, "metrics", metrics[i])
 	}
@@ -126,10 +117,5 @@ func (s *StoreType) generateMetricsForObject(obj *unstructured.Unstructured) []s
 }
 
 func inheritFamilyConfiguration(f *FamilyType, s *StoreType) {
-	if f.Resolver == ResolverTypeNone {
-		f.Resolver = s.Resolver
-	}
-
-	f.LabelKeys = append(f.LabelKeys, s.LabelKeys...)
-	f.LabelValues = append(f.LabelValues, s.LabelValues...)
+	f.AddonStubs = append(f.AddonStubs, s.AddonStubs...)
 }

@@ -18,95 +18,37 @@ metadata:
   name: prefilled
   namespace: default
 spec:
-  # NOTE: "unstructured" is the default resolver.
   configuration: |-
     stores:
       - group: "contoso.com"
         version: "v1alpha1"
         kind: "MyPlatform"
         resource: "myplatforms"
-        selectors:
-          field: "metadata.namespace=default"
         families:
-          - name: "platform_info"
-            help: "Information about each MyPlatform instance"
+          - name: "test_metric"
+            help: "helpless"
             metrics:
-              - resolver: "cel"
-                labelKeys: 
-                  - "name"
-                labelValues:
-                  - "o.metadata.name"
-                value: "o.metadata.labels.bar"
-              - labelKeys: 
-                  - "environmentType"
-                  - "language"
-                labelValues:
-                  - "spec.environmentType"
-                  - "spec.language"
-                value: "metadata.labels.foo"
-          - name: "platform_replicas"
-            help: "Number of replicas for each MyPlatform instance"
-            metrics:
-              - labelKeys: 
-                  - "name"
-                  - "dynamicNoResolveShouldOutputMapRepr_CompositeUnsupportedUpstreamForUnstructured"
-                labelValues:
-                  - "metadata.name"
-                  - "metadata.labels"
-                value: "spec.replicas"
-      - group: "samplecontroller.k8s.io"
-        version: "v1alpha1"
-        kind: "Foo"
-        resource: "foos"
-        selectors:
-          label: "app.kubernetes.io/part-of=sample-controller"
-        families:
-          - name: "foos_info"
-            help: "Information about each Foo instance"
-            metrics:
-              - resolver: "cel"
-                labelKeys: 
-                  - "dynamicShouldResolveToName"
-                  - "static"
-                  - "dynamicNoResolveShouldRemainTheSame1"
-                  - "dynamicNoResolveShouldRemainTheSame2"
-                labelValues:
-                  - "o.metadata.name"
-                  - "43-1"
-                  - "o.metadata.labels.baz"
-                  - "metadata.labels.baz"
-                value: "42"
-          - name: "foo_replicas"
-            help: "Number of replicas for each Foo instance"
-            metrics:
-              - labelKeys: 
-                  - "name"
-                labelValues:
-                  - "metadata.name"
-                value: "spec.replicas"
-      - resolver: "cel"
-        group: "contoso.com"
-        version: "v1alpha1"
-        kind: "MyPlatform"
-        resource: "myplatforms"
-        labelKeys:
-          - "job"
-        labelValues:
-          - "o.metadata.annotations.job"
-        families:
-          - name: "platform_info_conformance"
-            help: "Information about each MyPlatform instance (using existing exhaustive CRS feature-set for conformance)"
-            labelKeys:
-              - "id"
-            labelValues:
-              - "o.metadata.annotations.id"
-            metrics:
-              - labelKeys: 
-                  - "name"
-                  - "label_" # Maps will use this prefix to generate labels
-                  - ""
-                labelValues:
-                  - "o.metadata.name"
-                  - "o.metadata.labels"
-                  - "o.spec"
-                value: "o.metadata.labels.bar"
+              - stubs:
+                  - |
+                    package foo
+                    import (
+                      "k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+                      "github.com/kubernetes-sigs/resource-state-metrics/pkg/utils"
+                      klog "k8s.io/klog/v2"
+                    )
+                    func samples(o *unstructured.Unstructured) []utils.SampleType {
+                      klog.InfoS("Generating samples for resource",
+                        "name", o.GetName(),
+                        "namespace", o.GetNamespace(),
+                        "kind", o.GetKind(),
+                        "apiVersion", o.GetAPIVersion(),
+                        "uid", o.GetUID(),
+                      )
+                      return []utils.SampleType{
+                        {
+                          LabelKeys:  []string{"name"},
+                          LabelValues: []string{o.GetName()},
+                          Value: 1,
+                        },
+                      }
+                    }

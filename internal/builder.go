@@ -41,17 +41,14 @@ func buildStore(
 	ctx context.Context,
 	dynamicClientset dynamic.Interface,
 	gvkWithR gvkr,
-	metricFamilies []*FamilyType,
+	families []*FamilyType,
 	tryNoCache bool,
-	labelSelector, fieldSelector string,
-	resolver ResolverType,
-	labelKeys, labelValues []string,
+	addonStubs []string,
 ) *StoreType {
 	logger := klog.FromContext(ctx)
-	listerwatcher := buildLW(ctx, dynamicClientset, labelSelector, fieldSelector, tryNoCache, gvkWithR.GroupVersionResource)
-	headers := buildMetricHeaders(metricFamilies)
-	resolver = ensureResolver(resolver)
-	s := newStore(logger, headers, metricFamilies, resolver, labelKeys, labelValues)
+	listerwatcher := buildLW(ctx, dynamicClientset, tryNoCache, gvkWithR.GroupVersionResource)
+	headers := buildMetricHeaders(families)
+	s := newStore(logger, headers, families, addonStubs)
 	startReflector(ctx, listerwatcher, gvkWithR, s)
 
 	return s
@@ -64,14 +61,6 @@ func buildMetricHeaders(metricFamilies []*FamilyType) []string {
 	}
 
 	return headers
-}
-
-func ensureResolver(resolver ResolverType) ResolverType {
-	if resolver == ResolverTypeNone {
-		return ResolverTypeUnstructured
-	}
-
-	return resolver
 }
 
 func startReflector(ctx context.Context, lw *cache.ListWatch, gvkWithR gvkr, s *StoreType) {
@@ -88,14 +77,12 @@ func startReflector(ctx context.Context, lw *cache.ListWatch, gvkWithR gvkr, s *
 func buildLW(
 	ctx context.Context,
 	dynamicClientset dynamic.Interface,
-	labelSelector string,
-	fieldSelector string,
 	tryNoCache bool,
 	gvr schema.GroupVersionResource,
 ) *cache.ListWatch {
 	lwo := metav1.ListOptions{
-		LabelSelector: labelSelector,
-		FieldSelector: fieldSelector,
+		LabelSelector: "",
+		FieldSelector: "", // TODO
 	}
 	if tryNoCache {
 		lwo.ResourceVersion = "0"

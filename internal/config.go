@@ -79,17 +79,7 @@ func (c *configurer) build(ctx context.Context, uidToStoresMap map[types.UID][]*
 
 func (c *configurer) buildStoreFromConfig(ctx context.Context, cfg *StoreType, tryNoCache bool) *StoreType {
 	gvkWithR := buildGVKR(cfg)
-
-	return buildStore(
-		ctx,
-		c.dynamicClientset,
-		gvkWithR,
-		cfg.Families,
-		tryNoCache,
-		cfg.Selectors.Label, cfg.Selectors.Field,
-		cfg.Resolver,
-		cfg.LabelKeys, cfg.LabelValues,
-	)
+	return buildStore(ctx, c.dynamicClientset, gvkWithR, cfg.Families, tryNoCache, cfg.AddonStubs)
 }
 
 func buildGVKR(cfg *StoreType) gvkr {

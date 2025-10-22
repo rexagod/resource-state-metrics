@@ -54,7 +54,7 @@ func TestWriteMetricTo(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			var writer strings.Builder
-			if err := writeMetricTo(&writer, "group", "version", "kind", "42", tt.resolvedLabelKeys, tt.resolvedLabelValues); err != nil && !tt.wantErr {
+			if err := writeMetricTo(&writer, "group", "version", "kind", 42, tt.resolvedLabelKeys, tt.resolvedLabelValues); err != nil && !tt.wantErr {
 				t.Fatal(err)
 			}
 			if got := writer.String(); got != tt.expected {

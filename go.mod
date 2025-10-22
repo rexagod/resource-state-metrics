@@ -1,32 +1,30 @@
 module github.com/rexagod/resource-state-metrics
 
-go 1.23.0
+go 1.24.0
 
 require (
 	github.com/KimMachineGun/automemlimit v0.6.1
-	github.com/google/cel-go v0.21.0
 	github.com/google/go-cmp v0.6.0
-	github.com/iancoleman/strcase v0.3.0
 	github.com/openshift/api v0.0.0-20250320170726-75d64d71980b
 	github.com/openshift/client-go v0.0.0-20250320110000-c1107ae03533
 	github.com/prometheus/client_golang v1.19.1
 	github.com/prometheus/client_model v0.5.0
 	github.com/prometheus/common v0.48.0
+	github.com/traefik/yaegi v0.16.1
 	go.uber.org/automaxprocs v1.5.3
-	golang.org/x/text v0.23.0
+	golang.org/x/text v0.30.0
 	golang.org/x/time v0.7.0
 	gopkg.in/yaml.v3 v3.0.1
 	k8s.io/api v0.32.3
 	k8s.io/apimachinery v0.32.3
 	k8s.io/client-go v0.32.1
-	k8s.io/code-generator v0.32.1
+	k8s.io/code-generator v0.32.3
 	k8s.io/klog/v2 v2.130.1
 	k8s.io/kube-state-metrics v0.0.0-20190129120824-7bfed92869b6
 	k8s.io/utils v0.0.0-20241210054802-24370beab758
 )
 
 require (
-	github.com/antlr4-go/antlr/v4 v4.13.0 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cespare/xxhash/v2 v2.2.0 // indirect
 	github.com/cilium/ebpf v0.9.1 // indirect
@@ -58,18 +56,15 @@ require (
 	github.com/prometheus/procfs v0.12.0 // indirect
 	github.com/sirupsen/logrus v1.8.1 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
-	github.com/stoewer/go-strcase v1.2.0 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
-	golang.org/x/exp v0.0.0-20230515195305-f3d0a9c9a5cc // indirect
-	golang.org/x/mod v0.21.0 // indirect
-	golang.org/x/net v0.37.0 // indirect
+	golang.org/x/mod v0.29.0 // indirect
+	golang.org/x/net v0.46.0 // indirect
 	golang.org/x/oauth2 v0.23.0 // indirect
-	golang.org/x/sync v0.12.0 // indirect
-	golang.org/x/sys v0.31.0 // indirect
-	golang.org/x/term v0.30.0 // indirect
-	golang.org/x/tools v0.26.0 // indirect
-	google.golang.org/genproto/googleapis/api v0.0.0-20230803162519-f966b187b2e5 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20230803162519-f966b187b2e5 // indirect
+	golang.org/x/sync v0.17.0 // indirect
+	golang.org/x/sys v0.37.0 // indirect
+	golang.org/x/term v0.36.0 // indirect
+	golang.org/x/tools v0.38.0 // indirect
+	golang.org/x/tools/go/packages/packagestest v0.1.1-deprecated // indirect
 	google.golang.org/protobuf v1.35.1 // indirect
 	gopkg.in/evanphx/json-patch.v4 v4.12.0 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect

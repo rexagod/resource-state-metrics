@@ -57,5 +57,53 @@ In the order of priority:
 - [ ] Meta-metrics for metric generation failures.
 - [ ] Dynamic admission control for `ResourceMetricsMonitor` CRD.
 - [ ] [`s/stores/generators`](https://github.com/kubernetes/enhancements/pull/4811#discussion_r2121842302)
+- [ ] Regulate cardinality of generated metrics.
+- Change `label_name` and `label_value` bulleted-format to mapped-format.
 
 ###### [License](./LICENSE)
+
+```
+string = <string>
+array = [ <string>, <array>, <object>, ... ]
+object = { <string>: <string>, <string>: <array>, <string>: <object>, <string>: { ... }, ... }
+
+* Duplicates are possible in arrays.
+* Nesting is possible between arrays and objects.
+* `value` strings must resolve to `float64` values.
+```
+| label_name | label_value | value  | notes                                                   |
+|------------|-------------|--------|---------------------------------------------------------|
+| string     | string      | string | {foo="bar",foo="baz",...} 1                             |
+| string     | string      | array  | {foo="bar",foo="baz",...} 1 {foo="bar",foo="baz",...} 2 |
+| string     | string      | object |                                                         |
+| string     | array       | string |                                                         |
+| string     | array       | array  |                                                         |
+| string     | array       | object |                                                         |
+| string     | object      | string |                                                         |
+| string     | object      | array  |                                                         |
+| string     | object      | object |                                                         |
+| array      | string      | string |                                                         |
+| array      | string      | array  |                                                         |
+| array      | string      | object |                                                         |
+| array      | array       | string |                                                         |
+| array      | array       | array  |                                                         |
+| array      | array       | object |                                                         |
+| array      | object      | string |                                                         |
+| array      | object      | array  |                                                         |
+| array      | object      | object |                                                         |
+| object     | string      | string |                                                         |
+| object     | string      | array  |                                                         |
+| object     | string      | object |                                                         |
+| object     | array       | string |                                                         |
+| object     | array       | array  |                                                         |
+| object     | array       | object |                                                         |
+| object     | object      | string |                                                         |
+| object     | object      | array  |                                                         |
+| object     | object      | object |                                                         |
+
+Design Summary:
+- Store addon_stub: func(map[string]interface{}) map[string]string - returns common labels
+- Family addon_stub: func(map[string]interface{}) map[string]string - returns additional labels
+- Metric stub: func(map[string]interface{}) []Metric where Metric{LabelKeys, LabelValues, Value}
+- Labels from addon_stubs are appended to each Metric's labels
+- Complete removal of CEL/Unstructured resolvers 
