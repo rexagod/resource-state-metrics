@@ -1,0 +1,117 @@
+name: Docker Build and Push
+
+on:
+  push:
+    branches:
+      - main
+      - release-*
+  pull_request: {}
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Image version (e.g. v0.1.0)
+        required: false
+
+env:
+  GO_VERSION: '1.23.12'
+  DOCKER_BUILDX_VERSION: 'v0.23.0'
+
+  # Docker registry configuration
+  DOCKER_REGISTRY: docker.io
+  DOCKER_IMAGE: haarchri/resource-state-metrics
+
+  # Image version to push
+  IMAGE_VERSION: ${{ inputs.version }}
+
+jobs:
+  # Build packages for amd64 and arm64 architectures in parallel
+  build:
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: true
+      matrix:
+        arch:
+          - amd64
+          - arm64
+    steps:
+      - name: Setup QEMU
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: all
+
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          version: ${{ env.DOCKER_BUILDX_VERSION }}
+          install: true
+
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      # Use GitHub Action's native caching support to speed up the build
+      - name: Build Image
+        id: image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/${{ matrix.arch }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args:
+            GO_VERSION=${{ env.GO_VERSION }}
+          outputs: type=docker,dest=image-${{ matrix.arch }}.tar
+
+      - name: Upload Single-Platform Image
+        uses: actions/upload-artifact@v5
+        with:
+          name: image-${{ matrix.arch }}
+          path: "image-${{ matrix.arch }}.tar"
+          if-no-files-found: error
+          retention-days: 1
+
+  # Download single-platform images and push as multi-platform image
+  push:
+    runs-on: ubuntu-24.04
+    needs:
+      - build
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Download Single-Platform Images
+        uses: actions/download-artifact@v6
+        with:
+          path: .
+          merge-multiple: true
+
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          version: ${{ env.DOCKER_BUILDX_VERSION }}
+          install: true
+
+      - name: Login to Docker Registry
+        uses: docker/login-action@v3
+        if: github.event_name != 'pull_request'
+        with:
+          registry: ${{ env.DOCKER_REGISTRY }}
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      # If version wasn't provided, generate pseudo-version: v0.0.0-<date>-<short-sha>
+      - name: Set Default Image Version
+        if: env.IMAGE_VERSION == ''
+        run: echo "IMAGE_VERSION=v0.0.0-$(date -d@$(git show -s --format=%ct) +%Y%m%d%H%M%S)-$(git rev-parse --short=12 HEAD)" >> $GITHUB_ENV
+
+      - name: Load Images
+        run: |
+          docker load -i image-amd64.tar
+          docker load -i image-arm64.tar
+
+      - name: Push Multi-Platform Image
+        if: github.event_name != 'pull_request'
+        run: |
+          docker buildx imagetools create \
+            -t ${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_IMAGE }}:${{ env.IMAGE_VERSION }} \
+            -t ${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_IMAGE }}:latest \
+            $(docker images --format "{{.Repository}}:{{.Tag}}" | grep -v "<none>" | tr '\n' ' ')

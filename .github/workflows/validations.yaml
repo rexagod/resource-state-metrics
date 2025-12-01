@@ -86,8 +86,6 @@ jobs:
     steps:
       - name: Checkout the codebase
         uses: actions/checkout@v4
-        with:
-          path: github.com/rexagod/resource-state-metrics
       - name: Setup Go
         uses: actions/setup-go@v4
         with:
@@ -98,7 +96,6 @@ jobs:
           cluster_name: kind
       - name: Run tests
         run: |
-          cd github.com/rexagod/resource-state-metrics
           export KUBECONFIG=~/.kube/config
           kind get kubeconfig --name kind > $KUBECONFIG
           kind export kubeconfig
