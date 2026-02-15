@@ -3,6 +3,7 @@ package internal
 import (
 	"fmt"
 	"sync"
+	"time"
 
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -14,10 +15,12 @@ import (
 // StoreType implements the k8s.io/client-go/tools/cache.StoreType interface.
 // The cache.Reflector uses the cache.StoreType to operate on the store.metrics map with the various metric families and their metrics based on the associated object's events.
 type StoreType struct {
-	logger  klog.Logger
-	mutex   sync.RWMutex
-	metrics map[types.UID][]string
-	headers []string
+	logger       klog.Logger
+	mutex        sync.RWMutex
+	metrics      map[types.UID][]string
+	headers      []string
+	celCostLimit uint64
+	celTimeout   time.Duration
 
 	// Configuration fields unmarshalled from YAML
 	Group     string `yaml:"group"`
@@ -29,7 +32,7 @@ type StoreType struct {
 		Field string `yaml:"field,omitempty"`
 	} `yaml:"selectors,omitempty"`
 	Families    []*FamilyType `yaml:"families"`
-	Resolver    ResolverType  `yaml:"resolver"`
+	Resolver    ResolverType  `yaml:"resolver,omitempty"`
 	LabelKeys   []string      `yaml:"labelKeys,omitempty"`
 	LabelValues []string      `yaml:"labelValues,omitempty"`
 }
@@ -40,15 +43,19 @@ func newStore(
 	families []*FamilyType,
 	resolver ResolverType,
 	labelKeys []string, labelValues []string,
+	celCostLimit uint64,
+	celTimeout time.Duration,
 ) *StoreType {
 	return &StoreType{
-		logger:      logger,
-		metrics:     map[types.UID][]string{},
-		headers:     headers,
-		Families:    families,
-		Resolver:    resolver,
-		LabelKeys:   labelKeys,
-		LabelValues: labelValues,
+		logger:       logger,
+		metrics:      map[types.UID][]string{},
+		headers:      headers,
+		Families:     families,
+		Resolver:     resolver,
+		LabelKeys:    labelKeys,
+		LabelValues:  labelValues,
+		celCostLimit: celCostLimit,
+		celTimeout:   celTimeout,
 	}
 }
 

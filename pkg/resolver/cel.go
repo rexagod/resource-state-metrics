@@ -21,7 +21,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
-	"sync"
+	"time"
 
 	"github.com/google/cel-go/cel"
 	"github.com/google/cel-go/common/types"
@@ -32,17 +32,21 @@ import (
 
 // CELResolver represents a resolver for CEL expressions.
 type CELResolver struct {
-	logger              klog.Logger
-	mutex               sync.Mutex
-	resolvedFieldParent string
+	logger    klog.Logger
+	costLimit uint64
+	timeout   time.Duration
 }
 
 // CELResolver implements the Resolver interface.
 var _ Resolver = &CELResolver{}
 
-// NewCELResolver returns a new CEL resolver.
-func NewCELResolver(logger klog.Logger) *CELResolver {
-	return &CELResolver{logger: logger}
+// NewCELResolver returns a new limits-aware CEL resolver.
+func NewCELResolver(logger klog.Logger, costLimit uint64, timeout time.Duration) *CELResolver {
+	return &CELResolver{
+		logger:    logger,
+		costLimit: costLimit,
+		timeout:   timeout,
+	}
 }
 
 // costEstimator helps estimate the runtime cost of CEL queries.
@@ -62,36 +66,57 @@ func (ce costEstimator) CallCost(function string, _ string, _ []ref.Val, _ ref.V
 // Resolve resolves the given query against the given unstructured object.
 func (cr *CELResolver) Resolve(query string, unstructuredObjectMap map[string]interface{}) map[string]string {
 	logger := cr.logger.WithValues("query", query)
+
+	type result struct {
+		output map[string]string
+		err    error
+	}
+	resultChan := make(chan result, 1)
+
+	go func() {
+		output, err := cr.resolveWithTimeout(query, unstructuredObjectMap, logger)
+		resultChan <- result{output: output, err: err}
+	}()
+
+	select {
+	case res := <-resultChan:
+		if res.err != nil {
+			logger.V(1).Info("ignoring resolution for query", "info", res.err)
+			return cr.defaultMapping(query)
+		}
+		return res.output
+	case <-time.After(cr.timeout):
+		logger.Error(fmt.Errorf("CEL query exceeded timeout of %v", cr.timeout), "ignoring resolution for query")
+		return cr.defaultMapping(query)
+	}
+}
+
+func (cr *CELResolver) resolveWithTimeout(query string, unstructuredObjectMap map[string]interface{}, logger klog.Logger) (map[string]string, error) {
 	env, err := cr.createEnvironment()
 	if err != nil {
 		logger.Error(err, "ignoring resolution for query")
-
-		return cr.defaultMapping(query)
+		return nil, err
 	}
 
 	ast, iss := env.Parse(query)
 	if iss.Err() != nil {
 		logger.Error(fmt.Errorf("error parsing CEL query: %w", iss.Err()), "ignoring resolution for query")
-
-		return cr.defaultMapping(query)
+		return nil, iss.Err()
 	}
 
 	program, err := cr.compileProgram(env, ast)
 	if err != nil {
 		logger.Error(err, "ignoring resolution for query")
-
-		return cr.defaultMapping(query)
+		return nil, err
 	}
 
 	out, evalDetails, err := cr.evaluateProgram(program, unstructuredObjectMap)
 	logger = cr.addCostLogging(logger, evalDetails)
 	if err != nil {
-		logger.V(1).Info("ignoring resolution for query", "info", err)
-
-		return cr.defaultMapping(query)
+		return nil, err
 	}
 
-	return cr.processResult(query, out)
+	return cr.processResult(query, out), nil
 }
 
 func (cr *CELResolver) createEnvironment() (*cel.Env, error) {
@@ -103,11 +128,9 @@ func (cr *CELResolver) createEnvironment() (*cel.Env, error) {
 }
 
 func (cr *CELResolver) compileProgram(env *cel.Env, ast *cel.Ast) (cel.Program, error) {
-	const costLimit = 1000000
-
 	return env.Program(
 		ast,
-		cel.CostLimit(costLimit),
+		cel.CostLimit(cr.costLimit),
 		cel.CostTracking(new(costEstimator)),
 	)
 }
@@ -117,7 +140,7 @@ func (cr *CELResolver) evaluateProgram(program cel.Program, obj map[string]inter
 }
 
 func (cr *CELResolver) addCostLogging(logger klog.Logger, evalDetails *cel.EvalDetails) klog.Logger {
-	logger = logger.WithValues("costLimit", 1000000)
+	logger = logger.WithValues("costLimit", cr.costLimit, "timeout", cr.timeout)
 	if evalDetails != nil {
 		logger = logger.WithValues("queryCost", *evalDetails.ActualCost())
 	}
@@ -127,16 +150,14 @@ func (cr *CELResolver) addCostLogging(logger klog.Logger, evalDetails *cel.EvalD
 }
 
 func (cr *CELResolver) processResult(query string, out ref.Val) map[string]string {
-	cr.mutex.Lock()
-	cr.resolvedFieldParent = query[strings.LastIndex(query, ".")+1:]
-	cr.mutex.Unlock()
+	resolvedFieldParent := query[strings.LastIndex(query, ".")+1:]
 	switch out.Type() {
 	case types.BoolType, types.DoubleType, types.IntType, types.StringType, types.UintType:
 		return map[string]string{query: fmt.Sprintf("%v", out.Value())}
 	case types.MapType:
 		return cr.resolveMap(&out)
 	case types.ListType:
-		return cr.resolveList(&out)
+		return cr.resolveList(&out, resolvedFieldParent)
 	case types.NullType:
 		return map[string]string{query: "<nil>"}
 	default:
@@ -146,7 +167,7 @@ func (cr *CELResolver) processResult(query string, out ref.Val) map[string]strin
 	}
 }
 
-func (cr *CELResolver) resolveList(out *ref.Val) map[string]string {
+func (cr *CELResolver) resolveList(out *ref.Val, fieldParent string) map[string]string {
 	m := map[string]string{}
 	outList, ok := (*out).Value().([]interface{})
 	if !ok {
@@ -154,7 +175,7 @@ func (cr *CELResolver) resolveList(out *ref.Val) map[string]string {
 
 		return nil
 	}
-	cr.resolveListInner(outList, m)
+	cr.resolveListInner(outList, m, fieldParent)
 
 	return m
 }
@@ -172,13 +193,13 @@ func (cr *CELResolver) resolveMap(out *ref.Val) map[string]string {
 	return m
 }
 
-func (cr *CELResolver) resolveListInner(list []interface{}, out map[string]string) {
+func (cr *CELResolver) resolveListInner(list []interface{}, out map[string]string, fieldParent string) {
 	for i, v := range list {
 		switch v := v.(type) {
 		case string, int, uint, float64, bool:
-			out[cr.resolvedFieldParent+"#"+strconv.Itoa(i)] = fmt.Sprintf("%v", v)
+			out[fieldParent+"#"+strconv.Itoa(i)] = fmt.Sprintf("%v", v)
 		case []interface{}:
-			cr.resolveListInner(v, out)
+			cr.resolveListInner(v, out, fieldParent)
 		case map[string]interface{}:
 			cr.resolveMapInner(v, out)
 		default:
@@ -189,14 +210,11 @@ func (cr *CELResolver) resolveListInner(list []interface{}, out map[string]strin
 
 func (cr *CELResolver) resolveMapInner(m map[string]interface{}, out map[string]string) {
 	for k, v := range m {
-		cr.mutex.Lock()
-		cr.resolvedFieldParent = k
-		cr.mutex.Unlock()
 		switch v := v.(type) {
 		case string, int, uint, float64, bool:
 			out[k] = fmt.Sprintf("%v", v)
 		case []interface{}:
-			cr.resolveListInner(v, out)
+			cr.resolveListInner(v, out, k)
 		case map[string]interface{}:
 			cr.resolveMapInner(v, out)
 		default:

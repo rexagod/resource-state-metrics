@@ -24,11 +24,12 @@ func (m *metricsWriter) writeStores(writer io.Writer) error {
 		return nil
 	}
 
-	m.lockAllStores()
-	defer m.unlockAllStores()
-
 	for _, store := range m.stores {
-		if err := m.writeStore(writer, store); err != nil {
+		store.mutex.RLock()
+		err := m.writeFromStore(writer, store)
+		store.mutex.RUnlock()
+
+		if err != nil {
 			return err
 		}
 	}
@@ -36,19 +37,7 @@ func (m *metricsWriter) writeStores(writer io.Writer) error {
 	return nil
 }
 
-func (m *metricsWriter) lockAllStores() {
-	for _, store := range m.stores {
-		store.mutex.RLock()
-	}
-}
-
-func (m *metricsWriter) unlockAllStores() {
-	for _, store := range m.stores {
-		store.mutex.RUnlock()
-	}
-}
-
-func (m *metricsWriter) writeStore(writer io.Writer, store *StoreType) error {
+func (m *metricsWriter) writeFromStore(writer io.Writer, store *StoreType) error {
 	for i, header := range store.headers {
 		if err := writeHeader(writer, header); err != nil {
 			return fmt.Errorf("error writing header: %w", err)

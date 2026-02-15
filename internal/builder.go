@@ -19,6 +19,7 @@ package internal
 import (
 	"context"
 	"fmt"
+	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -42,16 +43,22 @@ func buildStore(
 	dynamicClientset dynamic.Interface,
 	gvkWithR gvkr,
 	metricFamilies []*FamilyType,
-	tryNoCache bool,
 	labelSelector, fieldSelector string,
 	resolver ResolverType,
 	labelKeys, labelValues []string,
+	celCostLimit uint64,
+	celTimeout time.Duration,
 ) *StoreType {
 	logger := klog.FromContext(ctx)
-	listerwatcher := buildLW(ctx, dynamicClientset, labelSelector, fieldSelector, tryNoCache, gvkWithR.GroupVersionResource)
+	listerwatcher := buildLW(ctx, dynamicClientset, labelSelector, fieldSelector, gvkWithR.GroupVersionResource)
 	headers := buildMetricHeaders(metricFamilies)
 	resolver = ensureResolver(resolver)
-	s := newStore(logger, headers, metricFamilies, resolver, labelKeys, labelValues)
+	// Propagate CEL limits to all families
+	for _, family := range metricFamilies {
+		family.celCostLimit = celCostLimit
+		family.celTimeout = celTimeout
+	}
+	s := newStore(logger, headers, metricFamilies, resolver, labelKeys, labelValues, celCostLimit, celTimeout)
 	startReflector(ctx, listerwatcher, gvkWithR, s)
 
 	return s
@@ -90,16 +97,11 @@ func buildLW(
 	dynamicClientset dynamic.Interface,
 	labelSelector string,
 	fieldSelector string,
-	tryNoCache bool,
 	gvr schema.GroupVersionResource,
 ) *cache.ListWatch {
 	lwo := metav1.ListOptions{
 		LabelSelector: labelSelector,
 		FieldSelector: fieldSelector,
-	}
-	if tryNoCache {
-		lwo.ResourceVersion = "0"
-		lwo.ResourceVersionMatch = metav1.ResourceVersionMatchNotOlderThan
 	}
 
 	return &cache.ListWatch{

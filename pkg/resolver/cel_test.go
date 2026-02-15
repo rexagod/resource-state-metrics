@@ -2,6 +2,7 @@ package resolver
 
 import (
 	"testing"
+	"time"
 
 	"github.com/google/go-cmp/cmp"
 	"k8s.io/klog/v2"
@@ -128,7 +129,7 @@ func TestNewCELResolver_Resolve(t *testing.T) {
 		},
 	}
 
-	cr := NewCELResolver(klog.NewKlogr())
+	cr := NewCELResolver(klog.NewKlogr(), 10e5, 5*time.Second)
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()

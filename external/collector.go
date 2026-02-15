@@ -1,6 +1,7 @@
 package external
 
 import (
+	"context"
 	"io"
 
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -13,7 +14,7 @@ type gvkr struct {
 	schema.GroupVersionResource
 }
 type collectors interface {
-	BuildCollector(kubeconfig string) *metricsstore.MetricsStore
+	BuildCollector(ctx context.Context, kubeconfig string) *metricsstore.MetricsStore
 	GVKR() gvkr
 	Register()
 }
@@ -32,11 +33,11 @@ func (ct *collectorsType) SetKubeConfig(kubeconfig string) *collectorsType {
 
 func (ct *collectorsType) Register(c collectors) {
 	ct.collectors = append(ct.collectors, c)
-	ct.builtCollectors = append(ct.builtCollectors, c.BuildCollector(ct.kubeconfig))
 }
 
-func (ct *collectorsType) Build() {
+func (ct *collectorsType) Build(ctx context.Context) {
 	for _, c := range ct.collectors {
+		ct.builtCollectors = append(ct.builtCollectors, c.BuildCollector(ctx, ct.kubeconfig))
 		c.Register()
 	}
 }

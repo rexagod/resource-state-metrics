@@ -21,6 +21,8 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/iancoleman/strcase"
 	"github.com/rexagod/resource-state-metrics/pkg/resolver"
@@ -38,6 +40,26 @@ const (
 	kubeCustomResourcePrefix = "kube_customresource_"
 )
 
+// stringBuilderPool pools strings.Builder instances to reduce GC pressure
+// during metric generation. It does so by cutting down on the number of
+// allocations and deallocations of strings.Builder objects, which can be
+// significant when generating a large number of metrics, especially in
+// high-cardinality scenarios.
+var stringBuilderPool = sync.Pool{
+	New: func() interface{} {
+		return &strings.Builder{}
+	},
+}
+
+func getBuilder() *strings.Builder {
+	return stringBuilderPool.Get().(*strings.Builder)
+}
+
+func putBuilder(b *strings.Builder) {
+	b.Reset()
+	stringBuilderPool.Put(b)
+}
+
 // ResolverType represents the type of resolver to use to evaluate the labelset expressions.
 type ResolverType string
 
@@ -49,28 +71,31 @@ const (
 
 // FamilyType represents a metric family (a group of metrics with the same name).
 type FamilyType struct {
-	logger      klog.Logger
-	Name        string        `yaml:"name"`
-	Help        string        `yaml:"help"`
-	Metrics     []*MetricType `yaml:"metrics"`
-	Resolver    ResolverType  `yaml:"resolver"`
-	LabelKeys   []string      `yaml:"labelKeys,omitempty"`
-	LabelValues []string      `yaml:"labelValues,omitempty"`
+	logger       klog.Logger
+	celCostLimit uint64
+	celTimeout   time.Duration
+	Name         string        `yaml:"name"`
+	Help         string        `yaml:"help"`
+	Metrics      []*MetricType `yaml:"metrics"`
+	Resolver     ResolverType  `yaml:"resolver,omitempty"`
+	LabelKeys    []string      `yaml:"labelKeys,omitempty"`
+	LabelValues  []string      `yaml:"labelValues,omitempty"`
 }
 
 // buildMetricString returns the given family in its byte representation.
 func (f *FamilyType) buildMetricString(unstructured *unstructured.Unstructured) string {
 	logger := f.logger.WithValues("family", f.Name)
-	familyRawBuilder := strings.Builder{}
+	familyRawBuilder := getBuilder()
+	defer putBuilder(familyRawBuilder)
 
 	for _, metric := range f.Metrics {
-		metricRawBuilder := strings.Builder{}
+		metricRawBuilder := getBuilder()
 
 		inheritMetricAttributes(f, metric)
 		resolverInstance, err := f.resolver(metric.Resolver)
 		if err != nil {
 			logger.V(1).Error(fmt.Errorf("error resolving metric: %w", err), "skipping")
-
+			putBuilder(metricRawBuilder)
 			continue
 		}
 
@@ -79,15 +104,17 @@ func (f *FamilyType) buildMetricString(unstructured *unstructured.Unstructured) 
 		resolvedValue, found := resolverInstance.Resolve(metric.Value, unstructured.Object)[metric.Value]
 		if !found {
 			logger.V(1).Error(fmt.Errorf("error resolving metric value %q", metric.Value), "skipping")
-
+			putBuilder(metricRawBuilder)
 			continue
 		}
 
-		err = writeMetricSamples(&metricRawBuilder, f.Name, unstructured, resolvedLabelKeys, resolvedLabelValues, resolvedExpandedLabelSet, resolvedValue, logger)
+		err = writeMetricSamples(metricRawBuilder, f.Name, unstructured, resolvedLabelKeys, resolvedLabelValues, resolvedExpandedLabelSet, resolvedValue, logger)
 		if err != nil {
+			putBuilder(metricRawBuilder)
 			continue
 		}
 		familyRawBuilder.WriteString(metricRawBuilder.String())
+		putBuilder(metricRawBuilder)
 	}
 
 	return familyRawBuilder.String()
@@ -106,6 +133,13 @@ func resolveLabels(metric *MetricType, resolverInstance resolver.Resolver, obj m
 		resolvedLabelValues      []string
 		resolvedExpandedLabelSet = make(map[string][]string)
 	)
+
+	// Validate that label keys and values have the same length before indexing.
+	if err := validateLabelLengths(metric.LabelKeys, metric.LabelValues); err != nil {
+		klog.Error(err, "skipping metric due to label length mismatch")
+		// Return empty results on validation failure to skip this metric gracefully.
+		return resolvedLabelKeys, resolvedLabelValues, resolvedExpandedLabelSet
+	}
 
 	for queryIndex, query := range metric.LabelValues {
 		resolvedLabelset := resolverInstance.Resolve(query, obj)
@@ -221,7 +255,7 @@ func (f *FamilyType) resolver(inheritedResolver ResolverType) (resolver.Resolver
 	case ResolverTypeUnstructured:
 		return resolver.NewUnstructuredResolver(f.logger), nil
 	case ResolverTypeCEL:
-		return resolver.NewCELResolver(f.logger), nil
+		return resolver.NewCELResolver(f.logger, f.celCostLimit, f.celTimeout), nil
 	default:
 		return nil, fmt.Errorf("error resolving metric: unknown resolver %q", inheritedResolver)
 	}

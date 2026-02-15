@@ -23,6 +23,7 @@ import (
 	"net"
 	"reflect"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/google/go-cmp/cmp"
@@ -39,7 +40,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/types"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/dynamic"
@@ -60,7 +60,7 @@ type Controller struct {
 	rsmInformerFactory informers.SharedInformerFactory
 	workqueue          workqueue.TypedRateLimitingInterface[[2]string]
 	recorder           record.EventRecorder
-	uidToStores        map[types.UID][]*StoreType
+	stores             sync.Map
 	options            *Options
 }
 
@@ -166,12 +166,11 @@ func (c *Controller) Run(ctx context.Context, workers int) error {
 		Buckets: prometheus.DefBuckets,
 	}, []string{"method", "code"})
 
-	c.uidToStores = make(map[types.UID][]*StoreType)
 	selfAddr := net.JoinHostPort(*c.options.SelfHost, strconv.Itoa(*c.options.SelfPort))
 	mainAddr := net.JoinHostPort(*c.options.MainHost, strconv.Itoa(*c.options.MainPort))
 
 	self := newSelfServer(selfAddr).build(ctx, c.kubeclientset, registry)
-	main := newMainServer(mainAddr, *c.options.Kubeconfig, c.uidToStores, requestDurationVec).build(ctx, c.kubeclientset, registry)
+	main := newMainServer(mainAddr, *c.options.Kubeconfig, &c.stores, requestDurationVec).build(ctx, c.kubeclientset, registry)
 
 	logger.V(1).Info("Starting workers")
 	for range workers {
@@ -196,8 +195,12 @@ func (c *Controller) Run(ctx context.Context, workers int) error {
 
 	<-ctx.Done()
 	logger.V(1).Info("Shutting down servers")
-	_ = self.Shutdown(ctx)
-	_ = main.Shutdown(ctx)
+	if err := self.Shutdown(ctx); err != nil {
+		logger.Error(err, "error shutting down telemetry server")
+	}
+	if err := main.Shutdown(ctx); err != nil {
+		logger.Error(err, "error shutting down main server")
+	}
 
 	return nil
 }
@@ -282,9 +285,9 @@ func (c *Controller) handleObject(ctx context.Context, objectI interface{}, even
 	logger.V(1).Info("Processing object")
 	switch o := object.(type) {
 	case *v1alpha1.ResourceMetricsMonitor:
-		handler := newHandler(c.kubeclientset, c.rsmClientset, c.dynamicClientset)
+		handler := newHandler(c.kubeclientset, c.rsmClientset, c.dynamicClientset, *c.options.CELCostLimit, time.Duration(*c.options.CELTimeout)*time.Second)
 
-		return handler.handleEvent(ctx, c.uidToStores, event, o, *c.options.TryNoCache)
+		return handler.handleEvent(ctx, &c.stores, event, o)
 	default:
 		logger.Error(stderrors.New("unknown object type"), "cannot handle object")
 

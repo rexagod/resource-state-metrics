@@ -21,13 +21,13 @@ import (
 	stderrors "errors"
 	"fmt"
 	"regexp"
+	"sync"
 	"time"
 
 	"github.com/rexagod/resource-state-metrics/internal/version"
 	"github.com/rexagod/resource-state-metrics/pkg/apis/resourcestatemetrics/v1alpha1"
 	clientset "github.com/rexagod/resource-state-metrics/pkg/generated/clientset/versioned"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/types"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/dynamic"
@@ -51,17 +51,21 @@ type handler struct {
 	kubeClientset    kubernetes.Interface
 	rsmClientset     clientset.Interface
 	dynamicClientset dynamic.Interface
+	celCostLimit     uint64
+	celTimeout       time.Duration
 }
 
-func newHandler(kubeClientset kubernetes.Interface, rsmClientset clientset.Interface, dynamicClientset dynamic.Interface) *handler {
+func newHandler(kubeClientset kubernetes.Interface, rsmClientset clientset.Interface, dynamicClientset dynamic.Interface, celCostLimit uint64, celTimeout time.Duration) *handler {
 	return &handler{
 		kubeClientset:    kubeClientset,
 		rsmClientset:     rsmClientset,
 		dynamicClientset: dynamicClientset,
+		celCostLimit:     celCostLimit,
+		celTimeout:       celTimeout,
 	}
 }
 
-func (h *handler) handleEvent(ctx context.Context, uidToStoresMap map[types.UID][]*StoreType, event string, o metav1.Object, tryNoCache bool) error {
+func (h *handler) handleEvent(ctx context.Context, stores *sync.Map, event string, o metav1.Object) error {
 	logger := klog.FromContext(ctx)
 
 	resource, ok := o.(*v1alpha1.ResourceMetricsMonitor)
@@ -93,11 +97,9 @@ func (h *handler) handleEvent(ctx context.Context, uidToStoresMap map[types.UID]
 		return nil
 	}
 
-	configurerInstance := newConfigurer(h.dynamicClientset, resource)
+	configurerInstance := newConfigurer(h.dynamicClientset, resource, h.celCostLimit, h.celTimeout)
 	dropStores := func() {
-		if _, ok = uidToStoresMap[resource.GetUID()]; ok {
-			delete(uidToStoresMap, resource.GetUID())
-		}
+		stores.Delete(resource.GetUID())
 	}
 
 	switch event {
@@ -109,7 +111,7 @@ func (h *handler) handleEvent(ctx context.Context, uidToStoresMap map[types.UID]
 
 			return nil
 		}
-		configurerInstance.build(ctx, uidToStoresMap, tryNoCache)
+		configurerInstance.build(ctx, stores)
 
 	case deleteEvent.String():
 		dropStores()
@@ -178,9 +180,8 @@ func (h *handler) updateMetadata(ctx context.Context, resource *v1alpha1.Resourc
 	logger := klog.FromContext(ctx)
 	kObj := klog.KObj(resource).String()
 
-	return wait.PollUntilContextTimeout(ctx, time.Second, time.Minute, false, func(context.Context) (bool, error) {
-		gotResource, err := h.rsmClientset.ResourceStateMetricsV1alpha1().ResourceMetricsMonitors(resource.GetNamespace()).
-			Get(ctx, resource.GetName(), metav1.GetOptions{})
+	return wait.PollUntilContextTimeout(ctx, time.Second, time.Minute, false, func(pollCtx context.Context) (bool, error) {
+		gotResource, err := h.rsmClientset.ResourceStateMetricsV1alpha1().ResourceMetricsMonitors(resource.GetNamespace()).Get(pollCtx, resource.GetName(), metav1.GetOptions{})
 		if err != nil {
 			return false, fmt.Errorf("failed to get %s: %w", kObj, err)
 		}
@@ -197,8 +198,7 @@ func (h *handler) updateMetadata(ctx context.Context, resource *v1alpha1.Resourc
 			logger.Error(stderrors.New("failed to get revision SHA, continuing anyway"), "cannot set version label")
 		}
 
-		resource, err = h.rsmClientset.ResourceStateMetricsV1alpha1().ResourceMetricsMonitors(resource.GetNamespace()).
-			Update(ctx, resource, metav1.UpdateOptions{})
+		resource, err = h.rsmClientset.ResourceStateMetricsV1alpha1().ResourceMetricsMonitors(resource.GetNamespace()).Update(pollCtx, resource, metav1.UpdateOptions{})
 		if err != nil {
 			return false, fmt.Errorf("failed to update %s: %w", kObj, err)
 		}

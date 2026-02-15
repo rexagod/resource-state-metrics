@@ -53,9 +53,10 @@ In the order of priority:
 - [X] `s/CRDMetrics/ResourceStateMetrics`.
 - [X] Make `ResourceMetricsMonitor` namespaced-scope. This allows for:
   - [X] per-namespace configuration (separate configurations between teams), and,
-  - [ ] garbage collection (without `finalizers`), since currently the namespace-scoped deployment manages its cluster-scoped resources.
+  - [X] ~~garbage collection (without `finalizers`), since currently the namespace-scoped deployment manages its cluster-scoped resources~~ RMM CRs are user-managed, and should persist.
 - [ ] Meta-metrics for metric generation failures.
 - [ ] Dynamic admission control for `ResourceMetricsMonitor` CRD.
 - [ ] [`s/stores/generators`](https://github.com/kubernetes/enhancements/pull/4811#discussion_r2121842302)
+- [ ] Drop the `/external` endpoint; this goes against the idea of "RSM doing things that a generic exporter can, and should", and adds unnecessary complexity to the codebase.
 
 ###### [License](./LICENSE)

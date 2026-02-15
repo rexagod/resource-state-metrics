@@ -19,11 +19,12 @@ package internal
 import (
 	"context"
 	"fmt"
+	"sync"
+	"time"
 
 	"github.com/rexagod/resource-state-metrics/pkg/apis/resourcestatemetrics/v1alpha1"
 	"gopkg.in/yaml.v3"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/dynamic"
 )
 
@@ -33,7 +34,7 @@ type configure interface {
 	parse(raw string) error
 
 	// build builds the given configuration.
-	build(ctx context.Context, uidToStoresMap map[types.UID][]*StoreType, tryNoCache bool)
+	build(ctx context.Context, stores *sync.Map)
 }
 
 // configuration defines the structured representation of a YAML configuration.
@@ -46,16 +47,20 @@ type configurer struct {
 	configuration    configuration
 	dynamicClientset dynamic.Interface
 	resource         *v1alpha1.ResourceMetricsMonitor
+	celCostLimit     uint64
+	celTimeout       time.Duration
 }
 
 // Ensure configurer implements configure.
 var _ configure = &configurer{}
 
 // newConfigurer returns a new configurer.
-func newConfigurer(dynamicClientset dynamic.Interface, resource *v1alpha1.ResourceMetricsMonitor) *configurer {
+func newConfigurer(dynamicClientset dynamic.Interface, resource *v1alpha1.ResourceMetricsMonitor, celCostLimit uint64, celTimeout time.Duration) *configurer {
 	return &configurer{
 		dynamicClientset: dynamicClientset,
 		resource:         resource,
+		celCostLimit:     celCostLimit,
+		celTimeout:       celTimeout,
 	}
 }
 
@@ -69,15 +74,16 @@ func (c *configurer) parse(raw string) error {
 }
 
 // build constructs the metric stores from the parsed configuration.
-func (c *configurer) build(ctx context.Context, uidToStoresMap map[types.UID][]*StoreType, tryNoCache bool) {
+func (c *configurer) build(ctx context.Context, stores *sync.Map) {
+	var builtStores []*StoreType
 	for _, cfg := range c.configuration.Stores {
-		s := c.buildStoreFromConfig(ctx, cfg, tryNoCache)
-		resourceUID := c.resource.GetUID()
-		uidToStoresMap[resourceUID] = append(uidToStoresMap[resourceUID], s)
+		s := c.buildStoreFromConfig(ctx, cfg)
+		builtStores = append(builtStores, s)
 	}
+	stores.Store(c.resource.GetUID(), builtStores)
 }
 
-func (c *configurer) buildStoreFromConfig(ctx context.Context, cfg *StoreType, tryNoCache bool) *StoreType {
+func (c *configurer) buildStoreFromConfig(ctx context.Context, cfg *StoreType) *StoreType {
 	gvkWithR := buildGVKR(cfg)
 
 	return buildStore(
@@ -85,10 +91,11 @@ func (c *configurer) buildStoreFromConfig(ctx context.Context, cfg *StoreType, t
 		c.dynamicClientset,
 		gvkWithR,
 		cfg.Families,
-		tryNoCache,
 		cfg.Selectors.Label, cfg.Selectors.Field,
 		cfg.Resolver,
 		cfg.LabelKeys, cfg.LabelValues,
+		c.celCostLimit,
+		c.celTimeout,
 	)
 }
 

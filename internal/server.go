@@ -31,7 +31,6 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/prometheus/common/expfmt"
 	"github.com/rexagod/resource-state-metrics/external"
-	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/klog/v2"
 )
@@ -54,8 +53,8 @@ type mainServer struct {
 	promHTTPLogger
 	// addr is the http.Server address to listen on.
 	addr string
-	// m is the map of currently active stores per resource.
-	m map[types.UID][]*StoreType
+	// stores is the thread-safe map of currently active stores per resource.
+	stores *sync.Map
 	// requestsDurationVec is a histogram denoting the request durations for the metrics endpoint. The metric itself is
 	// registered in the telemetry registry, and will be available along with all other main metrics, to not pollute the
 	// resource metrics.
@@ -79,12 +78,12 @@ func newSelfServer(addr string) *selfServer {
 }
 
 // newMainServer returns a new mainServer.
-func newMainServer(addr, kubeconfig string, m map[types.UID][]*StoreType, requestsDurationVec prometheus.ObserverVec) *mainServer {
+func newMainServer(addr, kubeconfig string, stores *sync.Map, requestsDurationVec prometheus.ObserverVec) *mainServer {
 	return &mainServer{
 		promHTTPLogger:      promHTTPLogger{"main"},
 		addr:                addr,
 		kubeconfig:          kubeconfig,
-		m:                   m,
+		stores:              stores,
 		requestsDurationVec: &requestsDurationVec,
 	}
 }
@@ -147,17 +146,23 @@ func (s *mainServer) build(ctx context.Context, client kubernetes.Interface, _ p
 		}
 	}
 	mux.Handle("/metrics", promhttp.InstrumentHandlerDuration(*s.requestsDurationVec, metricsHandler(func(w http.ResponseWriter) {
-		for _, stores := range s.m {
+		s.stores.Range(func(_, value any) bool {
+			stores, ok := value.([]*StoreType)
+			if !ok {
+				logger.Error(fmt.Errorf("invalid store type in map"), "error writing metrics", "source", s.source)
+				return true
+			}
 			err := newMetricsWriter(stores...).writeStores(w)
 			if err != nil {
 				logger.Error(err, "error writing metrics", "source", s.source)
 			}
-		}
+			return true
+		})
 	})))
 
 	// Handle the external path.
 	externalCollectors := external.CollectorsGetter().SetKubeConfig(s.kubeconfig)
-	externalCollectors.Build()
+	externalCollectors.Build(ctx)
 	mux.Handle("/external", promhttp.InstrumentHandlerDuration(*s.requestsDurationVec, metricsHandler(func(w http.ResponseWriter) {
 		externalCollectors.Write(w)
 	})))

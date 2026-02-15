@@ -20,24 +20,41 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 
 	"k8s.io/klog/v2"
 )
 
+const (
+	autoGOMAXPROCSFlagName  = "auto-gomaxprocs"
+	celCostLimitFlagName    = "cel-cost-limit"
+	celTimeoutFlagName      = "cel-timeout-seconds"
+	kubeconfigFlagName      = "kubeconfig"
+	mainHostFlagName        = "main-host"
+	mainPortFlagName        = "main-port"
+	masterURLFlagName       = "master"
+	ratioGOMEMLIMITFlagName = "ratio-gomemlimit"
+	selfHostFlagName        = "self-host"
+	selfPortFlagName        = "self-port"
+	versionFlagName         = "version"
+	workersFlagName         = "workers"
+)
+
 // Options represents the command-line Options.
 type Options struct {
 	AutoGOMAXPROCS  *bool
-	RatioGOMEMLIMIT *float64
+	CELCostLimit    *uint64
+	CELTimeout      *int
 	Kubeconfig      *string
-	MasterURL       *string
-	SelfHost        *string
-	SelfPort        *int
 	MainHost        *string
 	MainPort        *int
-	TryNoCache      *bool
-	Workers         *int
+	MasterURL       *string
+	RatioGOMEMLIMIT *float64
+	SelfHost        *string
+	SelfPort        *int
 	Version         *bool
+	Workers         *int
 
 	logger klog.Logger
 }
@@ -51,23 +68,25 @@ func NewOptions(logger klog.Logger) *Options {
 
 // Read reads the command-line flags and applies overrides, if any.
 func (o *Options) Read() {
-	o.AutoGOMAXPROCS = flag.Bool("auto-gomaxprocs", true, "Automatically set GOMAXPROCS to match CPU quota.")
-	o.RatioGOMEMLIMIT = flag.Float64("ratio-gomemlimit", 0.9, "GOMEMLIMIT to memory quota ratio.")
-	o.Kubeconfig = flag.String("kubeconfig", os.Getenv("KUBECONFIG"), "Path to a kubeconfig. Only required if out-of-cluster.")
-	o.MasterURL = flag.String("master", os.Getenv("KUBERNETES_MASTER"), "The address of the Kubernetes API server. Overrides any value in kubeconfig. Only required if out-of-cluster.")
-	o.SelfHost = flag.String("self-host", "::", "Host to expose self (telemetry) metrics on.")
-	o.SelfPort = flag.Int("self-port", 9998, "Port to expose self (telemetry) metrics on.")
-	o.MainHost = flag.String("main-host", "::", "Host to expose main metrics on.")
-	o.MainPort = flag.Int("main-port", 9999, "Port to expose main metrics on.")
-	o.TryNoCache = flag.Bool("try-no-cache", false, "Force the API server to [GET/LIST] the most recent versions.")
-	o.Workers = flag.Int("workers", 2, "Number of workers processing the queue.")
-	o.Version = flag.Bool("version", false, "Print version information and quit")
+	o.AutoGOMAXPROCS = flag.Bool(autoGOMAXPROCSFlagName, true, "Automatically set GOMAXPROCS to match CPU quota.")
+	o.CELCostLimit = flag.Uint64(celCostLimitFlagName, 10e5, "Maximum cost budget for CEL expression evaluation. CEL cost represents computational complexity: traversing an object field costs 1, invoking a function varies by complexity. This limit prevents runaway expressions from consuming excessive resources. Typical queries cost 100-10000; increase if legitimate queries hit the limit.")
+	o.CELTimeout = flag.Int(celTimeoutFlagName, 5, "Maximum time in seconds for CEL expression evaluation. This timeout enforces a wall-clock limit on query execution to prevent slow expressions from blocking metric generation. Increase if complex legitimate queries timeout.")
+	o.Kubeconfig = flag.String(kubeconfigFlagName, os.Getenv("KUBECONFIG"), "Path to a kubeconfig. Only required if out-of-cluster.")
+	o.MainHost = flag.String(mainHostFlagName, "::", "Host to expose main metrics on.")
+	o.MainPort = flag.Int(mainPortFlagName, 9999, "Port to expose main metrics on.")
+	o.MasterURL = flag.String(masterURLFlagName, os.Getenv("KUBERNETES_MASTER"), "The address of the Kubernetes API server. Overrides any value in kubeconfig. Only required if out-of-cluster.")
+	o.RatioGOMEMLIMIT = flag.Float64(ratioGOMEMLIMITFlagName, 0.9, "GOMEMLIMIT to memory quota ratio.")
+	o.SelfHost = flag.String(selfHostFlagName, "::", "Host to expose self (telemetry) metrics on.")
+	o.SelfPort = flag.Int(selfPortFlagName, 9998, "Port to expose self (telemetry) metrics on.")
+	o.Version = flag.Bool(versionFlagName, false, "Print version information and quit")
+	o.Workers = flag.Int(workersFlagName, 2, "Number of workers processing managed resources in the workqueue.")
 	flag.Parse()
 
 	// Respect overrides, this also helps in testing without setting the same defaults in a bunch of places.
 	flag.VisitAll(func(f *flag.Flag) {
-		// Don't override flags that have been set. Environment variable do not take precedence over command-line flags.
+		// Don't override flags that have been set. Environment variables do not take precedence over command-line flags.
 		if f.Value.String() != f.DefValue {
+			o.validateFlag(f.Name, f.Value.String())
 			return
 		}
 		name := f.Name
@@ -80,4 +99,20 @@ func (o *Options) Read() {
 			}
 		}
 	})
+}
+
+// TODO
+func (o *Options) validateFlag(name, value string) error {
+	switch name {
+	case celTimeoutFlagName:
+		valueInt, err := strconv.Atoi(value)
+		if err != nil {
+			return fmt.Errorf("invalid value for %s: %v", name, err)
+		}
+		if valueInt <= 0 || valueInt > 300 {
+			return fmt.Errorf("%s must be between 1 and 300 seconds", name)
+		}
+	}
+
+	return nil
 }

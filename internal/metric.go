@@ -28,13 +28,10 @@ type MetricType struct {
 	LabelKeys   []string     `yaml:"labelKeys"`
 	LabelValues []string     `yaml:"labelValues"`
 	Value       string       `yaml:"value"`
-	Resolver    ResolverType `yaml:"resolver"`
+	Resolver    ResolverType `yaml:"resolver,omitempty"`
 }
 
 func writeMetricTo(writer *strings.Builder, g, v, k, resolvedValue string, resolvedLabelKeys, resolvedLabelValues []string) error {
-	if err := validateLabelLengths(resolvedLabelKeys, resolvedLabelValues); err != nil {
-		return err
-	}
 	sortLabelset(resolvedLabelKeys, resolvedLabelValues)
 	resolvedLabelKeys, resolvedLabelValues = appendGVKLabels(resolvedLabelKeys, resolvedLabelValues, g, v, k)
 	if err := writeLabels(writer, resolvedLabelKeys, resolvedLabelValues); err != nil {

@@ -35,7 +35,7 @@ func (c *clusterResourceQuotaCollector) GVKR() gvkr {
 	}
 }
 
-func (c *clusterResourceQuotaCollector) BuildCollector(kubeconfig string) *metricsstore.MetricsStore {
+func (c *clusterResourceQuotaCollector) BuildCollector(ctx context.Context, kubeconfig string) *metricsstore.MetricsStore {
 	quotaMetricFamilies := []generator.FamilyGenerator{
 		{
 			Name: "openshift_clusterresourcequota_selector",
@@ -86,9 +86,9 @@ func (c *clusterResourceQuotaCollector) BuildCollector(kubeconfig string) *metri
 	)
 
 	for _, ns := range []string{metav1.NamespaceAll} {
-		lw := createClusterResourceQuotaListWatch(kubeconfig, ns)
+		lw := createClusterResourceQuotaListWatch(ctx, kubeconfig, ns)
 		reflector := cache.NewReflector(&lw, &v1.ClusterResourceQuota{}, store, 0)
-		go reflector.Run(context.TODO().Done())
+		go reflector.Run(ctx.Done())
 	}
 
 	return store
@@ -114,7 +114,7 @@ func wrapClusterResourceQuotaFunc(f func(config *v1.ClusterResourceQuota) *metri
 	}
 }
 
-func createClusterResourceQuotaListWatch(kubeconfig, _ string) cache.ListWatch {
+func createClusterResourceQuotaListWatch(ctx context.Context, kubeconfig, _ string) cache.ListWatch {
 	config, err := clientcmd.BuildConfigFromFlags("", kubeconfig)
 	if err != nil {
 		klog.Fatalf("cannot create quota config: %v", err)
@@ -126,10 +126,10 @@ func createClusterResourceQuotaListWatch(kubeconfig, _ string) cache.ListWatch {
 
 	return cache.ListWatch{
 		ListFunc: func(opts metav1.ListOptions) (runtime.Object, error) {
-			return client.QuotaV1().ClusterResourceQuotas().List(context.TODO(), opts)
+			return client.QuotaV1().ClusterResourceQuotas().List(ctx, opts)
 		},
 		WatchFunc: func(opts metav1.ListOptions) (watch.Interface, error) {
-			return client.QuotaV1().ClusterResourceQuotas().Watch(context.TODO(), opts)
+			return client.QuotaV1().ClusterResourceQuotas().Watch(ctx, opts)
 		},
 	}
 }
