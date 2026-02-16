@@ -1,5 +1,5 @@
 apiVersion: contoso.com/v1alpha1
-kind: MyPlatform
+kind: Bar
 metadata:
   name: test-sample
   namespace: default

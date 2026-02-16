@@ -1,15 +1,15 @@
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
-  name: myplatforms.contoso.com
+  name: bars.contoso.com
 spec:
   group: contoso.com
   names:
-    plural: myplatforms
-    singular: myplatform
-    kind: MyPlatform
+    plural: bars
+    singular: bar
+    kind: Bar
     shortNames:
-      - myp
+      - bar
   scope: Namespaced
   versions:
     - name: v1alpha1

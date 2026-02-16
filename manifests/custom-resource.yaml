@@ -23,13 +23,13 @@ spec:
     stores:
       - group: "contoso.com"
         version: "v1alpha1"
-        kind: "MyPlatform"
-        resource: "myplatforms"
+        kind: "Bar"
+        resource: "bars"
         selectors:
           field: "metadata.namespace=default"
         families:
           - name: "platform_info"
-            help: "Information about each MyPlatform instance"
+            help: "Information about each Bar instance"
             metrics:
               - resolver: "cel"
                 labelKeys: 
@@ -45,7 +45,7 @@ spec:
                   - "spec.language"
                 value: "metadata.labels.foo"
           - name: "platform_replicas"
-            help: "Number of replicas for each MyPlatform instance"
+            help: "Number of replicas for each Bar instance"
             metrics:
               - labelKeys: 
                   - "name"
@@ -87,15 +87,15 @@ spec:
       - resolver: "cel"
         group: "contoso.com"
         version: "v1alpha1"
-        kind: "MyPlatform"
-        resource: "myplatforms"
+        kind: "Bar"
+        resource: "bars"
         labelKeys:
           - "job"
         labelValues:
           - "o.metadata.annotations.job"
         families:
           - name: "platform_info_conformance"
-            help: "Information about each MyPlatform instance (using existing exhaustive CRS feature-set for conformance)"
+            help: "Information about each Bar instance (using existing exhaustive CRS feature-set for conformance)"
             labelKeys:
               - "id"
             labelValues:
