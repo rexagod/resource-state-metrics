@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -48,15 +49,20 @@ func buildStore(
 	labelKeys, labelValues []string,
 	celCostLimit uint64,
 	celTimeout time.Duration,
+	celEvaluations *prometheus.CounterVec,
+	namespace, name string,
 ) *StoreType {
 	logger := klog.FromContext(ctx)
 	listerwatcher := buildLW(ctx, dynamicClientset, labelSelector, fieldSelector, gvkWithR.GroupVersionResource)
 	headers := buildMetricHeaders(metricFamilies)
 	resolver = ensureResolver(resolver)
-	// Propagate CEL limits to all families
+	// Propagate CEL limits, metrics, and RMM identity to all families
 	for _, family := range metricFamilies {
 		family.celCostLimit = celCostLimit
 		family.celTimeout = celTimeout
+		family.celEvaluations = celEvaluations
+		family.managedRMMNamespace = namespace
+		family.managedRMMName = name
 	}
 	s := newStore(logger, headers, metricFamilies, resolver, labelKeys, labelValues, celCostLimit, celTimeout)
 	startReflector(ctx, listerwatcher, gvkWithR, s)

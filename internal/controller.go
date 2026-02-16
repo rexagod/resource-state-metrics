@@ -52,6 +52,14 @@ import (
 	"k8s.io/klog/v2"
 )
 
+type metrics struct {
+	requestDurationVec *prometheus.HistogramVec
+	resourcesMonitored *prometheus.GaugeVec
+	eventsProcessed    *prometheus.CounterVec
+	configParseErrors  *prometheus.CounterVec
+	celEvaluations     *prometheus.CounterVec
+}
+
 // Controller is the controller implementation for managed resources.
 type Controller struct {
 	kubeclientset      kubernetes.Interface
@@ -62,6 +70,8 @@ type Controller struct {
 	recorder           record.EventRecorder
 	stores             sync.Map
 	options            *Options
+
+	metrics
 }
 
 func NewController(ctx context.Context, options *Options, kubeClientset kubernetes.Interface, rsmClientset clientset.Interface, dynamicClientset dynamic.Interface) *Controller {
@@ -160,17 +170,44 @@ func (c *Controller) Run(ctx context.Context, workers int) error {
 		collectors.NewGoCollector(),
 		collectors.NewProcessCollector(collectors.ProcessCollectorOpts{Namespace: version.ControllerName.ToSnakeCase(), ReportErrors: true}),
 	)
-	requestDurationVec := promauto.With(registry).NewHistogramVec(prometheus.HistogramOpts{
-		Name:    "http_request_duration_seconds",
-		Help:    "A histogram of requests for the main server's metrics endpoint.",
-		Buckets: prometheus.DefBuckets,
+
+	namespace := version.ControllerName.ToSnakeCase()
+	c.requestDurationVec = promauto.With(registry).NewHistogramVec(prometheus.HistogramOpts{
+		Namespace: namespace,
+		Name:      "http_request_duration_seconds",
+		Help:      "A histogram of requests for the main server's metrics endpoint.",
+		Buckets:   prometheus.DefBuckets,
 	}, []string{"method", "code"})
+
+	c.resourcesMonitored = promauto.With(registry).NewGaugeVec(prometheus.GaugeOpts{
+		Namespace: namespace,
+		Name:      "resources_monitored_info",
+		Help:      "Information about ResourceMetricsMonitor resources currently being monitored.",
+	}, []string{"namespace", "name"})
+
+	c.eventsProcessed = promauto.With(registry).NewCounterVec(prometheus.CounterOpts{
+		Namespace: namespace,
+		Name:      "events_processed_total",
+		Help:      "Total number of events processed by type and status.",
+	}, []string{"namespace", "name", "event_type", "status"})
+
+	c.configParseErrors = promauto.With(registry).NewCounterVec(prometheus.CounterOpts{
+		Namespace: namespace,
+		Name:      "config_parse_errors_total",
+		Help:      "Total number of configuration parsing errors.",
+	}, []string{"namespace", "name"})
+
+	c.celEvaluations = promauto.With(registry).NewCounterVec(prometheus.CounterOpts{
+		Namespace: namespace,
+		Name:      "cel_evaluations_total",
+		Help:      "Total number of CEL expression evaluations by result.",
+	}, []string{"namespace", "name", "family", "result"})
 
 	selfAddr := net.JoinHostPort(*c.options.SelfHost, strconv.Itoa(*c.options.SelfPort))
 	mainAddr := net.JoinHostPort(*c.options.MainHost, strconv.Itoa(*c.options.MainPort))
 
 	self := newSelfServer(selfAddr).build(ctx, c.kubeclientset, registry)
-	main := newMainServer(mainAddr, *c.options.Kubeconfig, &c.stores, requestDurationVec).build(ctx, c.kubeclientset, registry)
+	main := newMainServer(mainAddr, *c.options.Kubeconfig, &c.stores, c.requestDurationVec).build(ctx, c.kubeclientset, registry)
 
 	logger.V(1).Info("Starting workers")
 	for range workers {
@@ -285,9 +322,7 @@ func (c *Controller) handleObject(ctx context.Context, objectI interface{}, even
 	logger.V(1).Info("Processing object")
 	switch o := object.(type) {
 	case *v1alpha1.ResourceMetricsMonitor:
-		handler := newHandler(c.kubeclientset, c.rsmClientset, c.dynamicClientset, *c.options.CELCostLimit, time.Duration(*c.options.CELTimeout)*time.Second)
-
-		return handler.handleEvent(ctx, &c.stores, event, o)
+		return c.handleEvent(ctx, &c.stores, event, o)
 	default:
 		logger.Error(stderrors.New("unknown object type"), "cannot handle object")
 

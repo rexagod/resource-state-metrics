@@ -26,12 +26,9 @@ import (
 
 	"github.com/rexagod/resource-state-metrics/internal/version"
 	"github.com/rexagod/resource-state-metrics/pkg/apis/resourcestatemetrics/v1alpha1"
-	clientset "github.com/rexagod/resource-state-metrics/pkg/generated/clientset/versioned"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/apimachinery/pkg/util/wait"
-	"k8s.io/client-go/dynamic"
-	"k8s.io/client-go/kubernetes"
 	"k8s.io/klog/v2"
 )
 
@@ -47,25 +44,7 @@ func (e eventType) String() string {
 	return []string{"addEvent", "updateEvent", "deleteEvent"}[e]
 }
 
-type handler struct {
-	kubeClientset    kubernetes.Interface
-	rsmClientset     clientset.Interface
-	dynamicClientset dynamic.Interface
-	celCostLimit     uint64
-	celTimeout       time.Duration
-}
-
-func newHandler(kubeClientset kubernetes.Interface, rsmClientset clientset.Interface, dynamicClientset dynamic.Interface, celCostLimit uint64, celTimeout time.Duration) *handler {
-	return &handler{
-		kubeClientset:    kubeClientset,
-		rsmClientset:     rsmClientset,
-		dynamicClientset: dynamicClientset,
-		celCostLimit:     celCostLimit,
-		celTimeout:       celTimeout,
-	}
-}
-
-func (h *handler) handleEvent(ctx context.Context, stores *sync.Map, event string, o metav1.Object) error {
+func (c *Controller) handleEvent(ctx context.Context, stores *sync.Map, event string, o metav1.Object) error {
 	logger := klog.FromContext(ctx)
 
 	resource, ok := o.(*v1alpha1.ResourceMetricsMonitor)
@@ -76,13 +55,13 @@ func (h *handler) handleEvent(ctx context.Context, stores *sync.Map, event strin
 	}
 	kObj := klog.KObj(resource).String()
 
-	if err := h.updateMetadata(ctx, resource); err != nil {
+	if err := c.updateMetadata(ctx, resource); err != nil {
 		logger.Error(fmt.Errorf("failed to update metadata for %s: %w", kObj, err), "cannot handle event")
 
 		return nil
 	}
 
-	updatedResource, err := h.emitSuccess(ctx, resource, metav1.ConditionFalse, fmt.Sprintf("Event handler received event: %s", event))
+	updatedResource, err := c.emitSuccess(ctx, resource, metav1.ConditionFalse, fmt.Sprintf("Event handler received event: %s", event))
 	if err != nil {
 		logger.Error(fmt.Errorf("failed to emit success on %s: %w", kObj, err), "cannot update the resource")
 
@@ -92,12 +71,12 @@ func (h *handler) handleEvent(ctx context.Context, stores *sync.Map, event strin
 
 	if resource.Spec.Configuration == "" {
 		logger.Error(stderrors.New("configuration YAML is empty"), "cannot process the resource")
-		h.emitFailure(ctx, resource, "Configuration YAML is empty")
+		c.emitFailure(ctx, resource, "Configuration YAML is empty")
 
 		return nil
 	}
 
-	configurerInstance := newConfigurer(h.dynamicClientset, resource, h.celCostLimit, h.celTimeout)
+	configurerInstance := newConfigurer(c.dynamicClientset, resource, *c.options.CELCostLimit, time.Duration(*c.options.CELTimeout)*time.Second, c.celEvaluations)
 	dropStores := func() {
 		stores.Delete(resource.GetUID())
 	}
@@ -107,35 +86,43 @@ func (h *handler) handleEvent(ctx context.Context, stores *sync.Map, event strin
 		dropStores()
 		if err := configurerInstance.parse(resource.Spec.Configuration); err != nil {
 			logger.Error(fmt.Errorf("failed to parse configuration YAML: %w", err), "cannot process the resource")
-			h.emitFailure(ctx, resource, fmt.Sprintf("Failed to parse configuration YAML: %s", err))
+			c.emitFailure(ctx, resource, fmt.Sprintf("Failed to parse configuration YAML: %s", err))
+			c.configParseErrors.WithLabelValues(resource.GetNamespace(), resource.GetName()).Inc()
+			c.eventsProcessed.WithLabelValues(resource.GetNamespace(), resource.GetName(), event, "failed").Inc()
 
 			return nil
 		}
 		configurerInstance.build(ctx, stores)
+		c.resourcesMonitored.WithLabelValues(resource.GetNamespace(), resource.GetName()).Set(1)
 
 	case deleteEvent.String():
 		dropStores()
+		c.resourcesMonitored.DeleteLabelValues(resource.GetNamespace(), resource.GetName())
 
 	default:
 		logger.Error(fmt.Errorf("unknown event type (%s)", event), "cannot process the resource")
-		h.emitFailure(ctx, resource, fmt.Sprintf("Unknown event type: %s", event))
+		c.emitFailure(ctx, resource, fmt.Sprintf("Unknown event type: %s", event))
+		c.eventsProcessed.WithLabelValues(resource.GetNamespace(), resource.GetName(), event, "failed").Inc()
 
 		return nil
 	}
 
-	if _, err := h.emitSuccess(ctx, resource, metav1.ConditionTrue, fmt.Sprintf("Event handler successfully processed event: %s", event)); err != nil {
+	if _, err := c.emitSuccess(ctx, resource, metav1.ConditionTrue, fmt.Sprintf("Event handler successfully processed event: %s", event)); err != nil {
 		logger.Error(fmt.Errorf("failed to emit success on %s: %w", kObj, err), "cannot update the resource")
+		c.eventsProcessed.WithLabelValues(resource.GetNamespace(), resource.GetName(), event, "failed").Inc()
 
 		return nil
 	}
+
+	c.eventsProcessed.WithLabelValues(resource.GetNamespace(), resource.GetName(), event, "success").Inc()
 
 	return nil
 }
 
-func (h *handler) emitSuccess(ctx context.Context, monitor *v1alpha1.ResourceMetricsMonitor, statusBool metav1.ConditionStatus, message string) (*v1alpha1.ResourceMetricsMonitor, error) {
+func (c *Controller) emitSuccess(ctx context.Context, monitor *v1alpha1.ResourceMetricsMonitor, statusBool metav1.ConditionStatus, message string) (*v1alpha1.ResourceMetricsMonitor, error) {
 	kObj := klog.KObj(monitor).String()
 
-	resource, err := h.rsmClientset.ResourceStateMetricsV1alpha1().ResourceMetricsMonitors(monitor.GetNamespace()).
+	resource, err := c.rsmClientset.ResourceStateMetricsV1alpha1().ResourceMetricsMonitors(monitor.GetNamespace()).
 		Get(ctx, monitor.GetName(), metav1.GetOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to get %s: %w", kObj, err)
@@ -145,7 +132,7 @@ func (h *handler) emitSuccess(ctx context.Context, monitor *v1alpha1.ResourceMet
 		Status:  statusBool,
 		Message: message,
 	})
-	resource, err = h.rsmClientset.ResourceStateMetricsV1alpha1().ResourceMetricsMonitors(resource.GetNamespace()).
+	resource, err = c.rsmClientset.ResourceStateMetricsV1alpha1().ResourceMetricsMonitors(resource.GetNamespace()).
 		UpdateStatus(ctx, resource, metav1.UpdateOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to update the status of %s: %w", kObj, err)
@@ -154,10 +141,10 @@ func (h *handler) emitSuccess(ctx context.Context, monitor *v1alpha1.ResourceMet
 	return resource, nil
 }
 
-func (h *handler) emitFailure(ctx context.Context, monitor *v1alpha1.ResourceMetricsMonitor, message string) {
+func (c *Controller) emitFailure(ctx context.Context, monitor *v1alpha1.ResourceMetricsMonitor, message string) {
 	kObj := klog.KObj(monitor).String()
 
-	resource, err := h.rsmClientset.ResourceStateMetricsV1alpha1().ResourceMetricsMonitors(monitor.GetNamespace()).
+	resource, err := c.rsmClientset.ResourceStateMetricsV1alpha1().ResourceMetricsMonitors(monitor.GetNamespace()).
 		Get(ctx, monitor.GetName(), metav1.GetOptions{})
 	if err != nil {
 		utilruntime.HandleError(fmt.Errorf("failed to get %s: %w", kObj, err))
@@ -169,19 +156,19 @@ func (h *handler) emitFailure(ctx context.Context, monitor *v1alpha1.ResourceMet
 		Status:  metav1.ConditionTrue,
 		Message: message,
 	})
-	_, err = h.rsmClientset.ResourceStateMetricsV1alpha1().ResourceMetricsMonitors(resource.GetNamespace()).
+	_, err = c.rsmClientset.ResourceStateMetricsV1alpha1().ResourceMetricsMonitors(resource.GetNamespace()).
 		UpdateStatus(ctx, resource, metav1.UpdateOptions{})
 	if err != nil {
 		utilruntime.HandleError(fmt.Errorf("failed to emit failure on %s: %w", kObj, err))
 	}
 }
 
-func (h *handler) updateMetadata(ctx context.Context, resource *v1alpha1.ResourceMetricsMonitor) error {
+func (c *Controller) updateMetadata(ctx context.Context, resource *v1alpha1.ResourceMetricsMonitor) error {
 	logger := klog.FromContext(ctx)
 	kObj := klog.KObj(resource).String()
 
 	return wait.PollUntilContextTimeout(ctx, time.Second, time.Minute, false, func(pollCtx context.Context) (bool, error) {
-		gotResource, err := h.rsmClientset.ResourceStateMetricsV1alpha1().ResourceMetricsMonitors(resource.GetNamespace()).Get(pollCtx, resource.GetName(), metav1.GetOptions{})
+		gotResource, err := c.rsmClientset.ResourceStateMetricsV1alpha1().ResourceMetricsMonitors(resource.GetNamespace()).Get(pollCtx, resource.GetName(), metav1.GetOptions{})
 		if err != nil {
 			return false, fmt.Errorf("failed to get %s: %w", kObj, err)
 		}
@@ -198,7 +185,7 @@ func (h *handler) updateMetadata(ctx context.Context, resource *v1alpha1.Resourc
 			logger.Error(stderrors.New("failed to get revision SHA, continuing anyway"), "cannot set version label")
 		}
 
-		resource, err = h.rsmClientset.ResourceStateMetricsV1alpha1().ResourceMetricsMonitors(resource.GetNamespace()).Update(pollCtx, resource, metav1.UpdateOptions{})
+		resource, err = c.rsmClientset.ResourceStateMetricsV1alpha1().ResourceMetricsMonitors(resource.GetNamespace()).Update(pollCtx, resource, metav1.UpdateOptions{})
 		if err != nil {
 			return false, fmt.Errorf("failed to update %s: %w", kObj, err)
 		}

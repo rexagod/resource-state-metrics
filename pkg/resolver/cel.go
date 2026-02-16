@@ -27,25 +27,34 @@ import (
 	"github.com/google/cel-go/common/types"
 	"github.com/google/cel-go/common/types/ref"
 	"github.com/google/cel-go/interpreter"
+	"github.com/prometheus/client_golang/prometheus"
 	"k8s.io/klog/v2"
 )
 
 // CELResolver represents a resolver for CEL expressions.
 type CELResolver struct {
-	logger    klog.Logger
-	costLimit uint64
-	timeout   time.Duration
+	logger                     klog.Logger
+	costLimit                  uint64
+	timeout                    time.Duration
+	expressionEvaluationMetric *prometheus.CounterVec
+	managedRMMNamespace        string
+	managedRMMName             string
+	familyName                 string
 }
 
 // CELResolver implements the Resolver interface.
 var _ Resolver = &CELResolver{}
 
 // NewCELResolver returns a new limits-aware CEL resolver.
-func NewCELResolver(logger klog.Logger, costLimit uint64, timeout time.Duration) *CELResolver {
+func NewCELResolver(logger klog.Logger, costLimit uint64, timeout time.Duration, celEvaluations *prometheus.CounterVec, rmmNamespace, rmmName, familyName string) *CELResolver {
 	return &CELResolver{
-		logger:    logger,
-		costLimit: costLimit,
-		timeout:   timeout,
+		logger:                     logger,
+		costLimit:                  costLimit,
+		timeout:                    timeout,
+		expressionEvaluationMetric: celEvaluations,
+		managedRMMNamespace:        rmmNamespace,
+		managedRMMName:             rmmName,
+		familyName:                 familyName,
 	}
 }
 
@@ -82,11 +91,20 @@ func (cr *CELResolver) Resolve(query string, unstructuredObjectMap map[string]in
 	case res := <-resultChan:
 		if res.err != nil {
 			logger.V(1).Info("ignoring resolution for query", "info", res.err)
+			if cr.expressionEvaluationMetric != nil {
+				cr.expressionEvaluationMetric.WithLabelValues(cr.managedRMMNamespace, cr.managedRMMName, cr.familyName, "error").Inc()
+			}
 			return cr.defaultMapping(query)
+		}
+		if cr.expressionEvaluationMetric != nil {
+			cr.expressionEvaluationMetric.WithLabelValues(cr.managedRMMNamespace, cr.managedRMMName, cr.familyName, "success").Inc()
 		}
 		return res.output
 	case <-time.After(cr.timeout):
 		logger.Error(fmt.Errorf("CEL query exceeded timeout of %v", cr.timeout), "ignoring resolution for query")
+		if cr.expressionEvaluationMetric != nil {
+			cr.expressionEvaluationMetric.WithLabelValues(cr.managedRMMNamespace, cr.managedRMMName, cr.familyName, "timeout").Inc()
+		}
 		return cr.defaultMapping(query)
 	}
 }

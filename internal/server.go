@@ -58,7 +58,7 @@ type mainServer struct {
 	// requestsDurationVec is a histogram denoting the request durations for the metrics endpoint. The metric itself is
 	// registered in the telemetry registry, and will be available along with all other main metrics, to not pollute the
 	// resource metrics.
-	requestsDurationVec *prometheus.ObserverVec
+	requestsDurationVec prometheus.ObserverVec
 	// Cluster configuration (needed for LW clients).
 	kubeconfig string
 }
@@ -84,7 +84,7 @@ func newMainServer(addr, kubeconfig string, stores *sync.Map, requestsDurationVe
 		addr:                addr,
 		kubeconfig:          kubeconfig,
 		stores:              stores,
-		requestsDurationVec: &requestsDurationVec,
+		requestsDurationVec: requestsDurationVec,
 	}
 }
 
@@ -145,7 +145,7 @@ func (s *mainServer) build(ctx context.Context, client kubernetes.Interface, _ p
 			generator(w)
 		}
 	}
-	mux.Handle("/metrics", promhttp.InstrumentHandlerDuration(*s.requestsDurationVec, metricsHandler(func(w http.ResponseWriter) {
+	mux.Handle("/metrics", promhttp.InstrumentHandlerDuration(s.requestsDurationVec, metricsHandler(func(w http.ResponseWriter) {
 		s.stores.Range(func(_, value any) bool {
 			stores, ok := value.([]*StoreType)
 			if !ok {
@@ -163,7 +163,7 @@ func (s *mainServer) build(ctx context.Context, client kubernetes.Interface, _ p
 	// Handle the external path.
 	externalCollectors := external.CollectorsGetter().SetKubeConfig(s.kubeconfig)
 	externalCollectors.Build(ctx)
-	mux.Handle("/external", promhttp.InstrumentHandlerDuration(*s.requestsDurationVec, metricsHandler(func(w http.ResponseWriter) {
+	mux.Handle("/external", promhttp.InstrumentHandlerDuration(s.requestsDurationVec, metricsHandler(func(w http.ResponseWriter) {
 		externalCollectors.Write(w)
 	})))
 

@@ -129,7 +129,7 @@ func TestNewCELResolver_Resolve(t *testing.T) {
 		},
 	}
 
-	cr := NewCELResolver(klog.NewKlogr(), 10e5, 5*time.Second)
+	cr := NewCELResolver(klog.NewKlogr(), 10e5, 5*time.Second, nil, "test-ns", "test-rmm", "test-family")
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()

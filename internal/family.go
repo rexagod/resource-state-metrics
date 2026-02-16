@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/iancoleman/strcase"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/rexagod/resource-state-metrics/pkg/resolver"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/klog/v2"
@@ -71,15 +72,18 @@ const (
 
 // FamilyType represents a metric family (a group of metrics with the same name).
 type FamilyType struct {
-	logger       klog.Logger
-	celCostLimit uint64
-	celTimeout   time.Duration
-	Name         string        `yaml:"name"`
-	Help         string        `yaml:"help"`
-	Metrics      []*MetricType `yaml:"metrics"`
-	Resolver     ResolverType  `yaml:"resolver,omitempty"`
-	LabelKeys    []string      `yaml:"labelKeys,omitempty"`
-	LabelValues  []string      `yaml:"labelValues,omitempty"`
+	logger              klog.Logger
+	celCostLimit        uint64
+	celTimeout          time.Duration
+	celEvaluations      *prometheus.CounterVec
+	managedRMMNamespace string
+	managedRMMName      string
+	Name                string        `yaml:"name"`
+	Help                string        `yaml:"help"`
+	Metrics             []*MetricType `yaml:"metrics"`
+	Resolver            ResolverType  `yaml:"resolver,omitempty"`
+	LabelKeys           []string      `yaml:"labelKeys,omitempty"`
+	LabelValues         []string      `yaml:"labelValues,omitempty"`
 }
 
 // buildMetricString returns the given family in its byte representation.
@@ -255,7 +259,7 @@ func (f *FamilyType) resolver(inheritedResolver ResolverType) (resolver.Resolver
 	case ResolverTypeUnstructured:
 		return resolver.NewUnstructuredResolver(f.logger), nil
 	case ResolverTypeCEL:
-		return resolver.NewCELResolver(f.logger, f.celCostLimit, f.celTimeout), nil
+		return resolver.NewCELResolver(f.logger, f.celCostLimit, f.celTimeout, f.celEvaluations, f.managedRMMNamespace, f.managedRMMName, f.Name), nil
 	default:
 		return nil, fmt.Errorf("error resolving metric: unknown resolver %q", inheritedResolver)
 	}

@@ -22,6 +22,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/rexagod/resource-state-metrics/pkg/apis/resourcestatemetrics/v1alpha1"
 	"gopkg.in/yaml.v3"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -49,18 +50,20 @@ type configurer struct {
 	resource         *v1alpha1.ResourceMetricsMonitor
 	celCostLimit     uint64
 	celTimeout       time.Duration
+	celEvaluations   *prometheus.CounterVec
 }
 
 // Ensure configurer implements configure.
 var _ configure = &configurer{}
 
 // newConfigurer returns a new configurer.
-func newConfigurer(dynamicClientset dynamic.Interface, resource *v1alpha1.ResourceMetricsMonitor, celCostLimit uint64, celTimeout time.Duration) *configurer {
+func newConfigurer(dynamicClientset dynamic.Interface, resource *v1alpha1.ResourceMetricsMonitor, celCostLimit uint64, celTimeout time.Duration, celEvaluations *prometheus.CounterVec) *configurer {
 	return &configurer{
 		dynamicClientset: dynamicClientset,
 		resource:         resource,
 		celCostLimit:     celCostLimit,
 		celTimeout:       celTimeout,
+		celEvaluations:   celEvaluations,
 	}
 }
 
@@ -96,6 +99,9 @@ func (c *configurer) buildStoreFromConfig(ctx context.Context, cfg *StoreType) *
 		cfg.LabelKeys, cfg.LabelValues,
 		c.celCostLimit,
 		c.celTimeout,
+		c.celEvaluations,
+		c.resource.GetNamespace(),
+		c.resource.GetName(),
 	)
 }
 
