@@ -1,3 +1,8 @@
+## Custom collector exammple
+
+The following example is guaranteed to work with `f3c2a8deff2f612c4b26157d6cd1bdc008118604`.
+
+```go
 package external
 
 import (
@@ -133,3 +138,5 @@ func createClusterResourceQuotaListWatch(ctx context.Context, kubeconfig, _ stri
 		},
 	}
 }
+```
+

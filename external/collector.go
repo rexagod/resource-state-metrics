@@ -52,7 +52,7 @@ func (ct *collectorsType) Write(w io.Writer) {
 var collectorsInstance = &collectorsType{
 	collectors: []collectors{
 		// Add collectors below:
-		&clusterResourceQuotaCollector{},
+		// &clusterResourceQuotaCollector{}, // see ./clusterresourcequota.go.md
 	},
 }
 
