@@ -6,18 +6,6 @@
 
 `resource-state-metrics` is a Kubernetes controller that builds on Kube-State-Metrics' Custom Resource State's ideology and generates metrics for custom resources based on the configuration specified in its managed resource, `ResourceMetricsMonitor`.
 
-The project's [conformance benchmarking](./tests/bench/bench.sh) shows 3x faster RTT for `resource-state-metrics` as compared to Kube-State-Metrics' Custom Resource Definition Metrics ([ea5826a](https://github.com/kubernetes/kube-state-metrics/commit/ea5826a92cde206fc6784d2cb6b7c2548d2b2290)) feature-set:
-
-```
-Thu Nov 21 05:06:09 IST 2024
-[RESOURCESTATEMETRICS]
-BUILD:	1059ms
-RTT:	1107ms
-[CUSTOMRESOURCESTATE]
-BUILD:	1116ms
-RTT:	3196ms
-```
-
 ## Development
 
 Start developing by following these steps:
@@ -42,8 +30,6 @@ For more details, take a look at the [Makefile](Makefile) targets.
 
 ## TODO
 
-In the order of priority:
-
 - [X] CEL expressions for metric generation (or [*unstructured.Unstructured](https://github.com/kubernetes/apimachinery/issues/181), if that suffices).
 - [X] Conformance test(s) for Kube-State-Metrics' [Custom Resource State API](https://github.com/kubernetes/kube-state-metrics/blob/main/docs/metrics/extend/customresourcestate-metrics.md#multiple-metricskitchen-sink).
 - [X] Benchmark(s) for Kube-State-Metrics' [Custom Resource State API](https://github.com/kubernetes/kube-state-metrics/blob/main/docs/metrics/extend/customresourcestate-metrics.md#multiple-metricskitchen-sink).
@@ -53,8 +39,8 @@ In the order of priority:
 - [X] `s/CRDMetrics/ResourceStateMetrics`.
 - [X] Make `ResourceMetricsMonitor` namespaced-scope. This allows for:
   - [X] per-namespace configuration (separate configurations between teams), and,
-  - [X] ~~garbage collection (without `finalizers`), since currently the namespace-scoped deployment manages its cluster-scoped resources~~ RMM custom resources are user-managed, and should persist.
-- [ ] Meta-metrics for metric generation failures.
+  - [X] ~~garbage collection (without `finalizers`), since currently the namespace-scoped deployment manages its cluster-scoped resources~~ `ResourceMetricsMonitor`s are user-managed, and should persist.
+- [X] Meta-metrics for metric generation failures.
 - [ ] Dynamic admission control for `ResourceMetricsMonitor` CRD.
 - [ ] [`s/stores/generators`](https://github.com/kubernetes/enhancements/pull/4811#discussion_r2121842302)
 

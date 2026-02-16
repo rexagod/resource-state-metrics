@@ -9,5 +9,3 @@ vendor/
 # `bench` artefacts
 ./wget-log*
 
-# IDE artefacts
-.idea

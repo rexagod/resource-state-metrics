@@ -1,4 +1,4 @@
-## Custom collector exammple
+## Custom collector example
 
 The following example is guaranteed to work with `f3c2a8deff2f612c4b26157d6cd1bdc008118604`.
 
@@ -139,4 +139,3 @@ func createClusterResourceQuotaListWatch(ctx context.Context, kubeconfig, _ stri
 	}
 }
 ```
-
