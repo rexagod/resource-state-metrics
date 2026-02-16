@@ -47,75 +47,94 @@ func (e eventType) String() string {
 func (c *Controller) handleEvent(ctx context.Context, stores *sync.Map, event string, o metav1.Object) error {
 	logger := klog.FromContext(ctx)
 
-	resource, ok := o.(*v1alpha1.ResourceMetricsMonitor)
-	if !ok {
-		logger.Error(fmt.Errorf("failed to cast object to %s", resource.GetObjectKind()), "cannot handle event")
-
-		return nil
-	}
-	kObj := klog.KObj(resource).String()
-
-	if err := c.updateMetadata(ctx, resource); err != nil {
-		logger.Error(fmt.Errorf("failed to update metadata for %s: %w", kObj, err), "cannot handle event")
-
-		return nil
-	}
-
-	updatedResource, err := c.emitSuccess(ctx, resource, metav1.ConditionFalse, fmt.Sprintf("Event handler received event: %s", event))
+	resource, err := c.validateAndPrepareResource(ctx, o, event)
 	if err != nil {
-		logger.Error(fmt.Errorf("failed to emit success on %s: %w", kObj, err), "cannot update the resource")
-
-		return nil
-	}
-	resource = updatedResource
-
-	if resource.Spec.Configuration == "" {
-		logger.Error(stderrors.New("configuration YAML is empty"), "cannot process the resource")
-		c.emitFailure(ctx, resource, "Configuration YAML is empty")
-
 		return nil
 	}
 
-	configurerInstance := newConfigurer(c.dynamicClientset, resource, *c.options.CELCostLimit, time.Duration(*c.options.CELTimeout)*time.Second, c.celEvaluations)
-	dropStores := func() {
-		stores.Delete(resource.GetUID())
-	}
-
-	switch event {
-	case addEvent.String(), updateEvent.String():
-		dropStores()
-		if err := configurerInstance.parse(resource.Spec.Configuration); err != nil {
-			logger.Error(fmt.Errorf("failed to parse configuration YAML: %w", err), "cannot process the resource")
-			c.emitFailure(ctx, resource, fmt.Sprintf("Failed to parse configuration YAML: %s", err))
-			c.configParseErrors.WithLabelValues(resource.GetNamespace(), resource.GetName()).Inc()
-			c.eventsProcessed.WithLabelValues(resource.GetNamespace(), resource.GetName(), event, "failed").Inc()
-
-			return nil
-		}
-		configurerInstance.build(ctx, stores)
-		c.resourcesMonitored.WithLabelValues(resource.GetNamespace(), resource.GetName()).Set(1)
-
-	case deleteEvent.String():
-		dropStores()
-		c.resourcesMonitored.DeleteLabelValues(resource.GetNamespace(), resource.GetName())
-
-	default:
-		logger.Error(fmt.Errorf("unknown event type (%s)", event), "cannot process the resource")
-		c.emitFailure(ctx, resource, fmt.Sprintf("Unknown event type: %s", event))
+	if err := c.processEvent(ctx, stores, event, resource); err != nil {
+		logger.Error(err, "event processing failed")
 		c.eventsProcessed.WithLabelValues(resource.GetNamespace(), resource.GetName(), event, "failed").Inc()
-
 		return nil
 	}
 
 	if _, err := c.emitSuccess(ctx, resource, metav1.ConditionTrue, fmt.Sprintf("Event handler successfully processed event: %s", event)); err != nil {
-		logger.Error(fmt.Errorf("failed to emit success on %s: %w", kObj, err), "cannot update the resource")
+		logger.Error(fmt.Errorf("failed to emit success on %s: %w", klog.KObj(resource).String(), err), "cannot update the resource")
 		c.eventsProcessed.WithLabelValues(resource.GetNamespace(), resource.GetName(), event, "failed").Inc()
-
 		return nil
 	}
 
 	c.eventsProcessed.WithLabelValues(resource.GetNamespace(), resource.GetName(), event, "success").Inc()
+	return nil
+}
 
+func (c *Controller) validateAndPrepareResource(ctx context.Context, o metav1.Object, event string) (*v1alpha1.ResourceMetricsMonitor, error) {
+	logger := klog.FromContext(ctx)
+
+	resource, ok := o.(*v1alpha1.ResourceMetricsMonitor)
+	if !ok {
+		logger.Error(fmt.Errorf("failed to cast object to ResourceMetricsMonitor"), "cannot handle event")
+		return nil, stderrors.New("invalid object type")
+	}
+
+	if err := c.updateMetadata(ctx, resource); err != nil {
+		logger.Error(fmt.Errorf("failed to update metadata for %s: %w", klog.KObj(resource).String(), err), "cannot handle event")
+		return nil, err
+	}
+
+	updatedResource, err := c.emitSuccess(ctx, resource, metav1.ConditionFalse, fmt.Sprintf("Event handler received event: %s", event))
+	if err != nil {
+		logger.Error(fmt.Errorf("failed to emit success on %s: %w", klog.KObj(resource).String(), err), "cannot update the resource")
+		return nil, err
+	}
+
+	if updatedResource.Spec.Configuration == "" {
+		logger.Error(stderrors.New("configuration YAML is empty"), "cannot process the resource")
+		c.emitFailure(ctx, updatedResource, "Configuration YAML is empty")
+		return nil, stderrors.New("empty configuration")
+	}
+
+	return updatedResource, nil
+}
+
+func (c *Controller) processEvent(ctx context.Context, stores *sync.Map, event string, resource *v1alpha1.ResourceMetricsMonitor) error {
+	switch event {
+	case addEvent.String(), updateEvent.String():
+		return c.processAddOrUpdate(ctx, stores, event, resource)
+	case deleteEvent.String():
+		return c.processDelete(stores, resource)
+	default:
+		logger := klog.FromContext(ctx)
+		logger.Error(fmt.Errorf("unknown event type (%s)", event), "cannot process the resource")
+		c.emitFailure(ctx, resource, fmt.Sprintf("Unknown event type: %s", event))
+		c.eventsProcessed.WithLabelValues(resource.GetNamespace(), resource.GetName(), event, "failed").Inc()
+		return fmt.Errorf("unknown event type: %s", event)
+	}
+}
+
+func (c *Controller) processAddOrUpdate(ctx context.Context, stores *sync.Map, event string, resource *v1alpha1.ResourceMetricsMonitor) error {
+	logger := klog.FromContext(ctx)
+
+	stores.Delete(resource.GetUID())
+
+	configurerInstance := newConfigurer(c.dynamicClientset, resource, *c.options.CELCostLimit, time.Duration(*c.options.CELTimeout)*time.Second, c.celEvaluations)
+	if err := configurerInstance.parse(resource.Spec.Configuration); err != nil {
+		logger.Error(fmt.Errorf("failed to parse configuration YAML: %w", err), "cannot process the resource")
+		c.emitFailure(ctx, resource, fmt.Sprintf("Failed to parse configuration YAML: %s", err))
+		c.configParseErrors.WithLabelValues(resource.GetNamespace(), resource.GetName()).Inc()
+		c.eventsProcessed.WithLabelValues(resource.GetNamespace(), resource.GetName(), event, "failed").Inc()
+		return err
+	}
+
+	configurerInstance.build(ctx, stores)
+	c.resourcesMonitored.WithLabelValues(resource.GetNamespace(), resource.GetName()).Set(1)
+
+	return nil
+}
+
+func (c *Controller) processDelete(stores *sync.Map, resource *v1alpha1.ResourceMetricsMonitor) error {
+	stores.Delete(resource.GetUID())
+	c.resourcesMonitored.DeleteLabelValues(resource.GetNamespace(), resource.GetName())
 	return nil
 }
 
