@@ -18,7 +18,7 @@ package internal
 
 import (
 	"context"
-	stderrors "errors"
+	"errors"
 	"fmt"
 	"regexp"
 	"sync"
@@ -49,22 +49,28 @@ func (c *Controller) handleEvent(ctx context.Context, stores *sync.Map, event st
 
 	resource, err := c.validateAndPrepareResource(ctx, o, event)
 	if err != nil {
+		logger.Error(err, "resource validation and preparation failed")
+		c.eventsProcessed.WithLabelValues(o.GetNamespace(), o.GetName(), event, "failed").Inc()
+
 		return nil
 	}
 
 	if err := c.processEvent(ctx, stores, event, resource); err != nil {
 		logger.Error(err, "event processing failed")
 		c.eventsProcessed.WithLabelValues(resource.GetNamespace(), resource.GetName(), event, "failed").Inc()
+
 		return nil
 	}
 
 	if _, err := c.emitSuccess(ctx, resource, metav1.ConditionTrue, fmt.Sprintf("Event handler successfully processed event: %s", event)); err != nil {
 		logger.Error(fmt.Errorf("failed to emit success on %s: %w", klog.KObj(resource).String(), err), "cannot update the resource")
 		c.eventsProcessed.WithLabelValues(resource.GetNamespace(), resource.GetName(), event, "failed").Inc()
+
 		return nil
 	}
 
 	c.eventsProcessed.WithLabelValues(resource.GetNamespace(), resource.GetName(), event, "success").Inc()
+
 	return nil
 }
 
@@ -73,25 +79,29 @@ func (c *Controller) validateAndPrepareResource(ctx context.Context, o metav1.Ob
 
 	resource, ok := o.(*v1alpha1.ResourceMetricsMonitor)
 	if !ok {
-		logger.Error(fmt.Errorf("failed to cast object to ResourceMetricsMonitor"), "cannot handle event")
-		return nil, stderrors.New("invalid object type")
+		logger.Error(errors.New("failed to cast object to ResourceMetricsMonitor"), "cannot handle event")
+
+		return nil, errors.New("invalid object type")
 	}
 
 	if err := c.updateMetadata(ctx, resource); err != nil {
 		logger.Error(fmt.Errorf("failed to update metadata for %s: %w", klog.KObj(resource).String(), err), "cannot handle event")
+
 		return nil, err
 	}
 
 	updatedResource, err := c.emitSuccess(ctx, resource, metav1.ConditionFalse, fmt.Sprintf("Event handler received event: %s", event))
 	if err != nil {
 		logger.Error(fmt.Errorf("failed to emit success on %s: %w", klog.KObj(resource).String(), err), "cannot update the resource")
+
 		return nil, err
 	}
 
 	if updatedResource.Spec.Configuration == "" {
-		logger.Error(stderrors.New("configuration YAML is empty"), "cannot process the resource")
+		logger.Error(errors.New("configuration YAML is empty"), "cannot process the resource")
 		c.emitFailure(ctx, updatedResource, "Configuration YAML is empty")
-		return nil, stderrors.New("empty configuration")
+
+		return nil, errors.New("empty configuration")
 	}
 
 	return updatedResource, nil
@@ -108,6 +118,7 @@ func (c *Controller) processEvent(ctx context.Context, stores *sync.Map, event s
 		logger.Error(fmt.Errorf("unknown event type (%s)", event), "cannot process the resource")
 		c.emitFailure(ctx, resource, fmt.Sprintf("Unknown event type: %s", event))
 		c.eventsProcessed.WithLabelValues(resource.GetNamespace(), resource.GetName(), event, "failed").Inc()
+
 		return fmt.Errorf("unknown event type: %s", event)
 	}
 }
@@ -123,6 +134,7 @@ func (c *Controller) processAddOrUpdate(ctx context.Context, stores *sync.Map, e
 		c.emitFailure(ctx, resource, fmt.Sprintf("Failed to parse configuration YAML: %s", err))
 		c.configParseErrors.WithLabelValues(resource.GetNamespace(), resource.GetName()).Inc()
 		c.eventsProcessed.WithLabelValues(resource.GetNamespace(), resource.GetName(), event, "failed").Inc()
+
 		return err
 	}
 
@@ -135,6 +147,7 @@ func (c *Controller) processAddOrUpdate(ctx context.Context, stores *sync.Map, e
 func (c *Controller) processDelete(stores *sync.Map, resource *v1alpha1.ResourceMetricsMonitor) error {
 	stores.Delete(resource.GetUID())
 	c.resourcesMonitored.DeleteLabelValues(resource.GetNamespace(), resource.GetName())
+
 	return nil
 }
 
@@ -201,7 +214,7 @@ func (c *Controller) updateMetadata(ctx context.Context, resource *v1alpha1.Reso
 		if len(revisionSHA) > 1 {
 			resource.Labels["app.kubernetes.io/version"] = revisionSHA[1]
 		} else {
-			logger.Error(stderrors.New("failed to get revision SHA, continuing anyway"), "cannot set version label")
+			logger.Error(errors.New("failed to get revision SHA, continuing anyway"), "cannot set version label")
 		}
 
 		resource, err = c.rsmClientset.ResourceStateMetricsV1alpha1().ResourceMetricsMonitors(resource.GetNamespace()).Update(pollCtx, resource, metav1.UpdateOptions{})

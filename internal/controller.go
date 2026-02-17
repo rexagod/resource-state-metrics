@@ -74,6 +74,7 @@ type Controller struct {
 	metrics
 }
 
+// NewController returns a new controller instance.
 func NewController(ctx context.Context, options *Options, kubeClientset kubernetes.Interface, rsmClientset clientset.Interface, dynamicClientset dynamic.Interface) *Controller {
 	logger := klog.FromContext(ctx)
 	utilruntime.Must(rsmscheme.AddToScheme(scheme.Scheme))
@@ -151,6 +152,7 @@ func (c *Controller) enqueue(obj interface{}, event eventType) {
 	c.workqueue.Add([2]string{key, event.String()})
 }
 
+// Run starts the controller and blocks until the context is cancelled.
 func (c *Controller) Run(ctx context.Context, workers int) error {
 	defer utilruntime.HandleCrash()
 	defer c.workqueue.ShutDown()

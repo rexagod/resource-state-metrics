@@ -69,7 +69,9 @@ func NewOptions(logger klog.Logger) *Options {
 // Read reads the command-line flags and applies overrides, if any.
 func (o *Options) Read() {
 	o.AutoGOMAXPROCS = flag.Bool(autoGOMAXPROCSFlagName, true, "Automatically set GOMAXPROCS to match CPU quota.")
+	//nolint:lll
 	o.CELCostLimit = flag.Uint64(celCostLimitFlagName, 10e5, "Maximum cost budget for CEL expression evaluation. CEL cost represents computational complexity: traversing an object field costs 1, invoking a function varies by complexity. This limit prevents runaway expressions from consuming excessive resources. Typical queries cost 100-10000; increase if legitimate queries hit the limit.")
+	//nolint:lll
 	o.CELTimeout = flag.Int(celTimeoutFlagName, 5, "Maximum time in seconds for CEL expression evaluation. This timeout enforces a wall-clock limit on query execution to prevent slow expressions from blocking metric generation. Increase if complex legitimate queries timeout.")
 	o.Kubeconfig = flag.String(kubeconfigFlagName, os.Getenv("KUBECONFIG"), "Path to a kubeconfig. Only required if out-of-cluster.")
 	o.MainHost = flag.String(mainHostFlagName, "::", "Host to expose main metrics on.")
@@ -86,7 +88,11 @@ func (o *Options) Read() {
 	flag.VisitAll(func(f *flag.Flag) {
 		// Don't override flags that have been set. Environment variables do not take precedence over command-line flags.
 		if f.Value.String() != f.DefValue {
-			o.validateFlag(f.Name, f.Value.String())
+			err := o.validateFlag(f.Name, f.Value.String())
+			if err != nil {
+				panic(fmt.Sprintf("Invalid value for flag %s: %v", f.Name, err))
+			}
+
 			return
 		}
 		name := f.Name
@@ -101,13 +107,11 @@ func (o *Options) Read() {
 	})
 }
 
-// TODO
 func (o *Options) validateFlag(name, value string) error {
-	switch name {
-	case celTimeoutFlagName:
+	if name == celTimeoutFlagName {
 		valueInt, err := strconv.Atoi(value)
 		if err != nil {
-			return fmt.Errorf("invalid value for %s: %v", name, err)
+			return fmt.Errorf("invalid value for %s: %w", name, err)
 		}
 		if valueInt <= 0 || valueInt > 300 {
 			return fmt.Errorf("%s must be between 1 and 300 seconds", name)

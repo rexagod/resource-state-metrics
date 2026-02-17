@@ -10,6 +10,10 @@ issues:
     - path: _test\.go
       linters:
         - lll
+    - path: ^tests/.*
+      linters:
+        - varnamelen
+      text: "variable name 'f' is too short for the scope of its usage"
 
 linters:
   disable:

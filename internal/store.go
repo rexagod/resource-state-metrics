@@ -101,12 +101,24 @@ func (s *StoreType) Delete(objectI interface{}) error {
 }
 
 // Stub implementations for interface compatibility.
-func (s *StoreType) List() []interface{}                          { return nil }
-func (s *StoreType) ListKeys() []string                           { return nil }
+
+// List is not needed for our use case, so it returns nil.
+func (s *StoreType) List() []interface{} { return nil }
+
+// ListKeys is not needed for our use case, so it returns nil.
+func (s *StoreType) ListKeys() []string { return nil }
+
+// Get is not needed for our use case, so it returns nil and false.
 func (s *StoreType) Get(_ interface{}) (interface{}, bool, error) { return nil, false, nil }
+
+// GetByKey is not needed for our use case, so it returns nil and false.
 func (s *StoreType) GetByKey(_ string) (interface{}, bool, error) { return nil, false, nil }
-func (s *StoreType) Replace(_ []interface{}, _ string) error      { return nil }
-func (s *StoreType) Resync() error                                { return nil }
+
+// Replace is not needed for our use case, so it does nothing and returns nil.
+func (s *StoreType) Replace(_ []interface{}, _ string) error { return nil }
+
+// Resync is not needed for our use case, so it does nothing and returns nil.
+func (s *StoreType) Resync() error { return nil }
 
 func convertToUnstructured(obj interface{}) (*unstructured.Unstructured, error) {
 	unstructuredMap, err := runtime.DefaultUnstructuredConverter.ToUnstructured(obj)

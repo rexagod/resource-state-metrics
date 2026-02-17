@@ -78,7 +78,7 @@ func (c *configurer) parse(raw string) error {
 
 // build constructs the metric stores from the parsed configuration.
 func (c *configurer) build(ctx context.Context, stores *sync.Map) {
-	var builtStores []*StoreType
+	builtStores := make([]*StoreType, 0, len(c.configuration.Stores))
 	for _, cfg := range c.configuration.Stores {
 		s := c.buildStoreFromConfig(ctx, cfg)
 		builtStores = append(builtStores, s)

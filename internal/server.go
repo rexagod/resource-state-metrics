@@ -149,13 +149,15 @@ func (s *mainServer) build(ctx context.Context, client kubernetes.Interface, _ p
 		s.stores.Range(func(_, value any) bool {
 			stores, ok := value.([]*StoreType)
 			if !ok {
-				logger.Error(fmt.Errorf("invalid store type in map"), "error writing metrics", "source", s.source)
+				logger.Error(errors.New("invalid store type in map"), "error writing metrics", "source", s.source)
+
 				return true
 			}
 			err := newMetricsWriter(stores...).writeStores(w)
 			if err != nil {
 				logger.Error(err, "error writing metrics", "source", s.source)
 			}
+
 			return true
 		})
 	})))

@@ -18,7 +18,6 @@ package internal
 
 import (
 	"fmt"
-	"sort"
 	"strconv"
 	"strings"
 )
@@ -32,7 +31,6 @@ type MetricType struct {
 }
 
 func writeMetricTo(writer *strings.Builder, g, v, k, resolvedValue string, resolvedLabelKeys, resolvedLabelValues []string) error {
-	sortLabelset(resolvedLabelKeys, resolvedLabelValues)
 	resolvedLabelKeys, resolvedLabelValues = appendGVKLabels(resolvedLabelKeys, resolvedLabelValues, g, v, k)
 	if err := writeLabels(writer, resolvedLabelKeys, resolvedLabelValues); err != nil {
 		return err
@@ -94,33 +92,4 @@ func writeValue(writer *strings.Builder, value string) error {
 	writer.WriteByte('\n')
 
 	return nil
-}
-
-// sortLabelset sorts the label keys and values while preserving order.
-func sortLabelset(resolvedLabelKeys, resolvedLabelValues []string) {
-	// Populate.
-	type labelset struct {
-		labelKey   string
-		labelValue string
-	}
-	labelsets := make([]labelset, len(resolvedLabelKeys))
-	for i := range resolvedLabelKeys {
-		labelsets[i] = labelset{labelKey: resolvedLabelKeys[i], labelValue: resolvedLabelValues[i]}
-	}
-
-	// Sort.
-	sort.Slice(labelsets, func(i, j int) bool {
-		a, b := labelsets[i].labelKey, labelsets[j].labelKey
-		if len(a) == len(b) {
-			return a < b
-		}
-
-		return len(a) < len(b)
-	})
-
-	// Re-populate.
-	for i := range labelsets {
-		resolvedLabelKeys[i] = labelsets[i].labelKey
-		resolvedLabelValues[i] = labelsets[i].labelValue
-	}
 }

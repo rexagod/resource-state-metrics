@@ -53,7 +53,12 @@ var stringBuilderPool = sync.Pool{
 }
 
 func getBuilder() *strings.Builder {
-	return stringBuilderPool.Get().(*strings.Builder)
+	b, ok := stringBuilderPool.Get().(*strings.Builder)
+	if !ok {
+		return &strings.Builder{}
+	}
+
+	return b
 }
 
 func putBuilder(b *strings.Builder) {
@@ -65,9 +70,12 @@ func putBuilder(b *strings.Builder) {
 type ResolverType string
 
 const (
-	ResolverTypeCEL          ResolverType = "cel"
+	// ResolverTypeCEL represents the CEL resolver, which uses Common Expression Language (CEL) to evaluate labelset expressions.
+	ResolverTypeCEL ResolverType = "cel"
+	// ResolverTypeUnstructured represents the unstructured resolver, which uses simple dot notation to resolve labelset expressions.
 	ResolverTypeUnstructured ResolverType = "unstructured"
-	ResolverTypeNone         ResolverType = ""
+	// ResolverTypeNone represents the absence of a resolver.
+	ResolverTypeNone ResolverType = ""
 )
 
 // FamilyType represents a metric family (a group of metrics with the same name).
@@ -100,6 +108,7 @@ func (f *FamilyType) buildMetricString(unstructured *unstructured.Unstructured) 
 		if err != nil {
 			logger.V(1).Error(fmt.Errorf("error resolving metric: %w", err), "skipping")
 			putBuilder(metricRawBuilder)
+
 			continue
 		}
 
@@ -109,12 +118,14 @@ func (f *FamilyType) buildMetricString(unstructured *unstructured.Unstructured) 
 		if !found {
 			logger.V(1).Error(fmt.Errorf("error resolving metric value %q", metric.Value), "skipping")
 			putBuilder(metricRawBuilder)
+
 			continue
 		}
 
 		err = writeMetricSamples(metricRawBuilder, f.Name, unstructured, resolvedLabelKeys, resolvedLabelValues, resolvedExpandedLabelSet, resolvedValue, logger)
 		if err != nil {
 			putBuilder(metricRawBuilder)
+
 			continue
 		}
 		familyRawBuilder.WriteString(metricRawBuilder.String())

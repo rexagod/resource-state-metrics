@@ -2,6 +2,29 @@
 
 The following example is guaranteed to work with `f3c2a8deff2f612c4b26157d6cd1bdc008118604`.
 
+```yaml
+apiVersion: quota.openshift.io/v1
+kind: ClusterResourceQuota
+metadata:
+  annotations:
+    app.kubernetes.io/managed-by: argo-git
+  labels:
+    app.kubernetes.io/instance: cluster-configs
+  name: namespace1-clusterquota
+spec:
+  quota:
+    hard:
+      limits.cpu: "72"
+      limits.memory: 1080Gi
+      requests.cpu: "72"
+      requests.memory: 1080Gi
+      persistentvolumeclaims: "60"
+  selector:
+    labels:
+      matchLabels:
+        quota: namespace1-clusterquota
+```
+
 ```go
 package external
 

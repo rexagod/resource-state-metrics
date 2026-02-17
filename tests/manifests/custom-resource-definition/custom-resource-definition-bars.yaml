@@ -1,9 +1,9 @@
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
-  name: bars.contoso.com
+  name: bars.samplecontroller.k8s.io
 spec:
-  group: contoso.com
+  group: samplecontroller.k8s.io
   names:
     plural: bars
     singular: bar
@@ -12,7 +12,7 @@ spec:
       - bar
   scope: Namespaced
   versions:
-    - name: v1alpha1
+    - name: v1beta1
       served: true
       storage: true
       schema:

@@ -43,6 +43,7 @@ For more details, take a look at the [Makefile](Makefile) targets.
 - [X] Meta-metrics for metric generation failures.
 - [ ] Dynamic admission control for `ResourceMetricsMonitor` CRD.
 - [ ] [`s/stores/generators`](https://github.com/kubernetes/enhancements/pull/4811#discussion_r2121842302)
-- [ ] Add golden rules covering all CRS constructs, and utilize fake clientset (for all e2e) to test them.
+- [X] Utilize fake client-set for all e2e tests.
+- [ ] Add golden rules covering all CRS constructs.
 
 ###### [License](./LICENSE)
