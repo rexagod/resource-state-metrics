@@ -59,7 +59,7 @@ func newStore(
 	}
 }
 
-// Add inserts or updates metrics for the given object.
+// Add is called when a new object is added, and it generates the associated metrics for the object and stores them in the store.metrics map.
 func (s *StoreType) Add(objectI interface{}) error {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
@@ -76,14 +76,15 @@ func (s *StoreType) Add(objectI interface{}) error {
 	return nil
 }
 
-// Update behaves identically to Add.
+// Update is called when an object is updated, and it updates the associated metrics in the store.
+// In this context, since metrics are generated based on the current state of the object, we simply call Add to regenerate the metrics for the updated object.
 func (s *StoreType) Update(objectI interface{}) error {
 	s.logger.V(2).Info("Update", "defer", "Add")
 
 	return s.Add(objectI)
 }
 
-// Delete removes the metrics for the given object.
+// Delete is called when an object is deleted, and it removes the associated metrics from the store.
 func (s *StoreType) Delete(objectI interface{}) error {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
@@ -100,6 +101,16 @@ func (s *StoreType) Delete(objectI interface{}) error {
 	return nil
 }
 
+// Replace is called when the reflector does a resync or starts up and lists all existing objects.
+func (s *StoreType) Replace(items []interface{}, _ string) error {
+	for _, item := range items {
+		if err := s.Add(item); err != nil {
+			s.logger.Error(err, "failed to add item during replace")
+		}
+	}
+	return nil
+}
+
 // Stub implementations for interface compatibility.
 
 // List is not needed for our use case, so it returns nil.
@@ -113,9 +124,6 @@ func (s *StoreType) Get(_ interface{}) (interface{}, bool, error) { return nil, 
 
 // GetByKey is not needed for our use case, so it returns nil and false.
 func (s *StoreType) GetByKey(_ string) (interface{}, bool, error) { return nil, false, nil }
-
-// Replace is not needed for our use case, so it does nothing and returns nil.
-func (s *StoreType) Replace(_ []interface{}, _ string) error { return nil }
 
 // Resync is not needed for our use case, so it does nothing and returns nil.
 func (s *StoreType) Resync() error { return nil }

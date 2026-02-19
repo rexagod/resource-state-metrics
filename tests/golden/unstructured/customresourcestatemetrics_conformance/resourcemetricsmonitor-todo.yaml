@@ -1,1 +1,39 @@
 ---
+name: resourcemetricsmonitor-todo
+description: "Tests a simple ResourceMetricsMonitor that generates a constant gauge"
+in:
+  apiVersion: resource-state-metrics.instrumentation.k8s-sigs.io/v1alpha1
+  kind: ResourceMetricsMonitor
+  metadata:
+    name: resourcemetricsmonitor-todo
+    namespace: default
+  spec:
+    configuration: |
+      stores:
+        - group: "samplecontroller.k8s.io"
+          version: "v1beta1"
+          kind: "Bar"
+          resource: "bars"
+          families:
+            - name: "bars_info"
+              help: "Information about each Bar instance"
+              metrics:
+                - labelKeys:
+                    - "name"
+                  labelValues:
+                    - "metadata.name"
+                  value: "metadata.labels.bar"
+                - labelKeys:
+                    - "environmentType"
+                    - "language"
+                  labelValues:
+                    - "spec.environmentType"
+                    - "spec.language"
+                  value: "metadata.labels.foo"
+out:
+  metrics:
+    - '# HELP kube_customresource_bars_info Information about each Bar instance'
+    - '# TYPE kube_customresource_bars_info gauge'
+    - 'kube_customresource_bars_info{name="test-sample",group="samplecontroller.k8s.io",version="v1beta1",kind="Bar"} 2'
+    - 'kube_customresource_bars_info{environment_type="dev",language="csharp",group="samplecontroller.k8s.io",version="v1beta1",kind="Bar"} 1'
+

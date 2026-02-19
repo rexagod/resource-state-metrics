@@ -30,7 +30,6 @@ import (
 	"github.com/rexagod/resource-state-metrics/pkg/apis/resourcestatemetrics/v1alpha1"
 	rsmclientset "github.com/rexagod/resource-state-metrics/pkg/generated/clientset/versioned"
 	rsmfake "github.com/rexagod/resource-state-metrics/pkg/generated/clientset/versioned/fake"
-	"gopkg.in/yaml.v3"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apiextensionsclientset "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
 	apiextensionsfake "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset/fake"
@@ -45,12 +44,14 @@ import (
 	kubefake "k8s.io/client-go/kubernetes/fake"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog/v2"
+	"sigs.k8s.io/yaml"
 )
 
 const (
-	shortTimeInterval = 100 * time.Millisecond
-	longTimeInterval  = time.Second
-	gvkIndexName      = "gvk"
+	gvkIndexName = "gvk"
+
+	ShortTimeInterval = 100 * time.Millisecond
+	LongTimeInterval  = time.Second
 )
 
 var (
@@ -63,26 +64,21 @@ var (
 
 // Framework provides utilities for e2e testing with mock clientsets.
 type Framework struct {
-	KubeClient          kubernetes.Interface
-	RSMClient           rsmclientset.Interface
-	DynamicClient       *dynamicfake.FakeDynamicClient
-	APIExtensionsClient apiextensionsclientset.Interface
-	Controller          *internal.Controller
-	Options             *internal.Options
-	scheme              *runtime.Scheme
+	Options   *internal.Options
+	RSMClient rsmclientset.Interface
+
+	apiExtensionsClient apiextensionsclientset.Interface
+	controller          *internal.Controller
 	crdInformer         cache.SharedIndexInformer
 	crdInformerFactory  apiextensionsinformers.SharedInformerFactory
+	dynamicClient       *dynamicfake.FakeDynamicClient
+	kubeClient          kubernetes.Interface
+	scheme              *runtime.Scheme
 }
 
-// New creates a new test framework with mock clientsets.
-func New(ctx context.Context, addersToScheme ...func(*runtime.Scheme) error) *Framework {
-	scheme := runtime.NewScheme()
-	for _, adder := range addersToScheme {
-		if err := adder(scheme); err != nil {
-			panic(fmt.Sprintf("failed to add to scheme: %v", err))
-		}
-	}
-
+// NewInforming creates a new test framework with mock clientsets, and starts the CRD informer to keep it populated for test operations.
+// Optional initial RMMs can be provided to pre-populate the fake RSM client before the controller starts.
+func NewInforming(ctx context.Context, initialObjects ...runtime.Object) *Framework {
 	apiExtensionsClient := apiextensionsfake.NewSimpleClientset()
 	crdInformerFactory := apiextensionsinformers.NewSharedInformerFactory(apiExtensionsClient, 0)
 	crdInformer := crdInformerFactory.Apiextensions().V1().CustomResourceDefinitions().Informer()
@@ -107,11 +103,10 @@ func New(ctx context.Context, addersToScheme ...func(*runtime.Scheme) error) *Fr
 	})
 
 	f := &Framework{
-		KubeClient:          kubefake.NewClientset(),
-		RSMClient:           rsmfake.NewSimpleClientset(),
-		DynamicClient:       dynamicfake.NewSimpleDynamicClient(scheme),
-		APIExtensionsClient: apiExtensionsClient,
-		scheme:              scheme,
+		kubeClient:          kubefake.NewClientset(),
+		RSMClient:           rsmfake.NewSimpleClientset(initialObjects...),
+		apiExtensionsClient: apiExtensionsClient,
+		scheme:              runtime.NewScheme(), // use f.AddToScheme to inject types into the scheme
 		crdInformer:         crdInformer,
 		crdInformerFactory:  crdInformerFactory,
 	}
@@ -122,21 +117,48 @@ func New(ctx context.Context, addersToScheme ...func(*runtime.Scheme) error) *Fr
 	return f
 }
 
+// AddToScheme adds types to the framework's scheme. Panics if any adder returns an error.
+func (f *Framework) AddToScheme(adder func(*runtime.Scheme)) *runtime.Scheme {
+	adder(f.scheme)
+
+	return f.scheme
+}
+
+// WithDynamicClient initializes the dynamic client with the provided custom
+// GVR to ListKind mapping. Panics if the scheme is not initialized or has no
+// known types, as the dynamic client relies on the scheme for object mapping.
+// The caller must ensure that the mapping is consistent with the types added
+// to the scheme via AddToScheme().
+func (f *Framework) WithDynamicClient(injectedCustomGVRToListKind map[schema.GroupVersionResource]string) {
+	if f.scheme == nil {
+		panic("scheme is not initialized; call AddToScheme() to initialize the scheme before setting up the dynamic client")
+	}
+
+	f.dynamicClient = dynamicfake.NewSimpleDynamicClientWithCustomListKinds(f.scheme, injectedCustomGVRToListKind)
+}
+
 // Start starts the RSM controller with the mock clients.
 func (f *Framework) Start(ctx context.Context, workers int) error {
-	if f.Controller != nil {
-		// Controller is already running
+	switch {
+	case f.dynamicClient == nil:
+		panic("dynamic client is not initialized; call WithDynamicClient() to initialize it before starting the controller")
+	case len(f.scheme.AllKnownTypes()) == 0:
+		panic("scheme has no known types; call AddToScheme() to add types to the scheme before starting the controller")
+	}
+
+	// Check if controller is already running
+	if f.controller != nil {
 		return nil
 	}
 
 	f.Options = &internal.Options{Workers: &workers}
 	f.Options.Read()
 
-	f.Controller = internal.NewController(ctx, f.Options, f.KubeClient, f.RSMClient, f.DynamicClient)
+	f.controller = internal.NewController(ctx, f.Options, f.kubeClient, f.RSMClient, f.dynamicClient)
 
 	// Start controller in background
 	go func() {
-		if err := f.Controller.Run(ctx, *f.Options.Workers); err != nil {
+		if err := f.controller.Run(ctx, *f.Options.Workers); err != nil {
 			klog.FromContext(ctx).Error(err, "controller failed to start")
 		}
 	}()
@@ -148,10 +170,25 @@ func (f *Framework) Start(ctx context.Context, workers int) error {
 	return nil
 }
 
+// GetConformanceGoldenRuleFiles returns all KSM CRS conformance golden rule file paths for the specified resolver types.
+func GetConformanceGoldenRuleFiles(resolverTypes []internal.ResolverType) []string {
+	var files []string
+	for _, resolverType := range resolverTypes {
+		goldenDir := filepath.Join("golden", string(resolverType), "customresourcestatemetrics_conformance")
+		if _, err := os.Stat(goldenDir); os.IsNotExist(err) {
+			continue
+		}
+
+		matches, _ := filepath.Glob(filepath.Join(goldenDir, "*.yaml"))
+		files = append(files, matches...)
+	}
+	return files
+}
+
 // waitForControllerReady waits for the controller to be ready.
 func (f *Framework) waitForControllerReady() error {
 	timeout := time.After(10 * time.Second)
-	ticker := time.NewTicker(shortTimeInterval)
+	ticker := time.NewTicker(ShortTimeInterval)
 	defer ticker.Stop()
 
 	for {
@@ -161,7 +198,7 @@ func (f *Framework) waitForControllerReady() error {
 			return fmt.Errorf("timed out waiting for controller main server port %d to open", port)
 		case <-ticker.C:
 			addr := fmt.Sprintf("127.0.0.1:%d", port)
-			conn, err := net.DialTimeout("tcp", addr, 5*shortTimeInterval)
+			conn, err := net.DialTimeout("tcp", addr, 5*ShortTimeInterval)
 			if err == nil {
 				_ = conn.Close()
 
@@ -169,6 +206,32 @@ func (f *Framework) waitForControllerReady() error {
 			}
 		}
 	}
+}
+
+// GoldenRule defines the structure of a golden rule for testing metric generation.
+// Every field is required; no omitempty allowed, to ensure the test is fully specified.
+type GoldenRule struct {
+	Name        string                     `yaml:"name"`
+	Description string                     `yaml:"description"`
+	In          *unstructured.Unstructured `yaml:"in"` // In is resource-agnostic to accomadate for any future resources introduced in RSM.
+	Out         struct {
+		Metrics []string `yaml:"metrics"`
+	} `yaml:"out"`
+}
+
+// GoldenRuleFromYAML loads a golden rule from a YAML file.
+func GoldenRuleFromYAML(ctx context.Context, path string) (*GoldenRule, error) {
+	data, err := os.ReadFile(ensureSafePath(path))
+	if err != nil {
+		return nil, fmt.Errorf("failed to read YAML file %s: %w", path, err)
+	}
+
+	goldenRule := &GoldenRule{}
+	if err := yaml.Unmarshal(data, goldenRule); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal YAML: %w", err)
+	}
+
+	return goldenRule, nil
 }
 
 // ApplyCRFromYAML applies a custom resource from a YAML file.
@@ -200,12 +263,7 @@ func (f *Framework) ApplyCRUnstructured(ctx context.Context, customresource *uns
 		Resource: resource,
 	}
 
-	// Set default namespace if not specified
-	if customresource.GetNamespace() == "" {
-		customresource.SetNamespace("default")
-	}
-
-	resourceClient := f.DynamicClient.Resource(gvr).Namespace(customresource.GetNamespace())
+	resourceClient := f.dynamicClient.Resource(gvr).Namespace(customresource.GetNamespace())
 	created, err := resourceClient.Create(ctx, customresource, metav1.CreateOptions{})
 	if err == nil {
 		return created, nil
@@ -228,18 +286,40 @@ func (f *Framework) ApplyCRUnstructured(ctx context.Context, customresource *uns
 }
 
 // GetCRUnstructured retrieves a custom resource as an unstructured object.
-func (f *Framework) GetCRUnstructured(ctx context.Context, gvr schema.GroupVersionResource, namespace, name string) (*unstructured.Unstructured, error) {
-	return f.DynamicClient.Resource(gvr).Namespace(namespace).Get(ctx, name, metav1.GetOptions{})
+func (f *Framework) GetCRUnstructured(ctx context.Context, gvk schema.GroupVersionKind, namespace, name string) (*unstructured.Unstructured, error) {
+	resource, err := f.GetResourcePluralNameForGVK(gvk)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get resource for %s: %w", gvk, err)
+	}
+
+	gvr := schema.GroupVersionResource{
+		Group:    gvk.Group,
+		Version:  gvk.Version,
+		Resource: resource,
+	}
+
+	return f.dynamicClient.Resource(gvr).Namespace(namespace).Get(ctx, name, metav1.GetOptions{})
 }
 
 // ListCRsUnstructured lists custom resources as unstructured objects.
-func (f *Framework) ListCRsUnstructured(ctx context.Context, gvr schema.GroupVersionResource, namespace string) (*unstructured.UnstructuredList, error) {
-	return f.DynamicClient.Resource(gvr).Namespace(namespace).List(ctx, metav1.ListOptions{})
+func (f *Framework) ListCRsUnstructured(ctx context.Context, gvk schema.GroupVersionKind, namespace string) (*unstructured.UnstructuredList, error) {
+	resource, err := f.GetResourcePluralNameForGVK(gvk)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get resource for %s: %w", gvk, err)
+	}
+
+	gvr := schema.GroupVersionResource{
+		Group:    gvk.Group,
+		Version:  gvk.Version,
+		Resource: resource,
+	}
+
+	return f.dynamicClient.Resource(gvr).Namespace(namespace).List(ctx, metav1.ListOptions{})
 }
 
 // DeleteCR deletes a custom resource.
 func (f *Framework) DeleteCR(ctx context.Context, gvr schema.GroupVersionResource, namespace, name string) error {
-	err := f.DynamicClient.Resource(gvr).Namespace(namespace).Delete(ctx, name, metav1.DeleteOptions{})
+	err := f.dynamicClient.Resource(gvr).Namespace(namespace).Delete(ctx, name, metav1.DeleteOptions{})
 	if err != nil {
 		return fmt.Errorf("failed to delete CR %s/%s: %w", namespace, name, err)
 	}
@@ -259,7 +339,7 @@ func (f *Framework) CreateCRDFromYAML(ctx context.Context, path string) (*apiext
 		return nil, fmt.Errorf("failed to unmarshal YAML: %w", err)
 	}
 
-	created, err := f.APIExtensionsClient.ApiextensionsV1().CustomResourceDefinitions().Create(ctx, crd, metav1.CreateOptions{})
+	created, err := f.apiExtensionsClient.ApiextensionsV1().CustomResourceDefinitions().Create(ctx, crd, metav1.CreateOptions{})
 	if err != nil {
 		return nil, err
 	}
@@ -269,6 +349,17 @@ func (f *Framework) CreateCRDFromYAML(ctx context.Context, path string) (*apiext
 	}
 
 	return created, nil
+}
+
+// GetIndexedCRDs returns all CRDs currently indexed by the CRD informer.
+func (f *Framework) GetIndexedCRDs() []*apiextensionsv1.CustomResourceDefinition {
+	var crds []*apiextensionsv1.CustomResourceDefinition
+	for _, obj := range f.crdInformer.GetIndexer().List() {
+		if crd, ok := obj.(*apiextensionsv1.CustomResourceDefinition); ok {
+			crds = append(crds, crd)
+		}
+	}
+	return crds
 }
 
 // GetResourcePluralNameForGVK returns the plural resource name for a given GVK by querying the CRD informer index.
@@ -309,8 +400,8 @@ func (f *Framework) FromUnstructured(u *unstructured.Unstructured, o runtime.Obj
 
 // waitForCRDIndexed waits for a CRD to appear in the informer index.
 func (f *Framework) waitForCRDIndexed(crd *apiextensionsv1.CustomResourceDefinition) error {
-	timeout := time.After(longTimeInterval)
-	ticker := time.NewTicker(shortTimeInterval)
+	timeout := time.After(LongTimeInterval)
+	ticker := time.NewTicker(ShortTimeInterval)
 	defer ticker.Stop()
 
 	for {

@@ -1,8 +1,0 @@
----
-# Description: The following RMM definition reflects the absolute minimum set of fields that the controller expects.
-
-apiVersion: resource-state-metrics.instrumentation.k8s-sigs.io/v1alpha1
-kind: ResourceMetricsMonitor
-metadata:
-  name: resourcemetricsmonitor-minimal
-  namespace: default

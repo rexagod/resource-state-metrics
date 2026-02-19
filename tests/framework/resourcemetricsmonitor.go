@@ -21,9 +21,48 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/rexagod/resource-state-metrics/internal"
 	"github.com/rexagod/resource-state-metrics/pkg/apis/resourcestatemetrics/v1alpha1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 )
+
+const (
+	ResourceMetricsMonitorKind = "ResourceMetricsMonitor"
+)
+
+// LoadRMMsFromGoldenRules extracts all RMMs from golden rule files.
+// This is needed because fake Kubernetes clients don't emit watch events for objects
+// created after informers start; RMMs must exist when the controller's informer initializes.
+func LoadRMMsFromGoldenRules(ctx context.Context) ([]runtime.Object, error) {
+	var rmms []runtime.Object
+
+	files := GetConformanceGoldenRuleFiles([]internal.ResolverType{
+		internal.ResolverTypeUnstructured,
+	})
+
+	for _, file := range files {
+		goldenRule, err := GoldenRuleFromYAML(ctx, file)
+		if err != nil {
+			return nil, fmt.Errorf("failed to load golden rule from %s: %w", file, err)
+		}
+		if goldenRule.In == nil {
+			return nil, fmt.Errorf("golden rule %s has no input resource defined", file)
+		}
+		if goldenRule.In.GetKind() != ResourceMetricsMonitorKind {
+			return nil, fmt.Errorf("golden rule %s input resource is not a ResourceMetricsMonitor", file)
+		}
+
+		var rmm v1alpha1.ResourceMetricsMonitor
+		if err := runtime.DefaultUnstructuredConverter.FromUnstructured(goldenRule.In.Object, &rmm); err != nil {
+			return nil, fmt.Errorf("failed to convert unstructured to RMM for golden rule %s: %w", file, err)
+		}
+
+		rmms = append(rmms, &rmm)
+	}
+
+	return rmms, nil
+}
 
 // ApplyRMM applies a ResourceMetricsMonitor resource using ApplyCR.
 func (f *Framework) ApplyRMM(ctx context.Context, rmm *v1alpha1.ResourceMetricsMonitor) (*v1alpha1.ResourceMetricsMonitor, error) {
@@ -67,7 +106,7 @@ func (f *Framework) WaitForRMMProcessed(ctx context.Context, namespace, name str
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	ticker := time.NewTicker(shortTimeInterval)
+	ticker := time.NewTicker(ShortTimeInterval)
 	defer ticker.Stop()
 
 	for {
