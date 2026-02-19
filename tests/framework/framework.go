@@ -163,7 +163,7 @@ func (f *Framework) Start(ctx context.Context, workers int) error {
 		}
 	}()
 
-	if err := f.waitForControllerReady(); err != nil {
+	if err := f.waitForControllerReady(ctx); err != nil {
 		return fmt.Errorf("controller failed to become ready: %w", err)
 	}
 
@@ -182,30 +182,8 @@ func GetConformanceGoldenRuleFiles(resolverTypes []internal.ResolverType) []stri
 		matches, _ := filepath.Glob(filepath.Join(goldenDir, "*.yaml"))
 		files = append(files, matches...)
 	}
+
 	return files
-}
-
-// waitForControllerReady waits for the controller to be ready.
-func (f *Framework) waitForControllerReady() error {
-	timeout := time.After(10 * time.Second)
-	ticker := time.NewTicker(ShortTimeInterval)
-	defer ticker.Stop()
-
-	for {
-		port := *f.Options.MainPort
-		select {
-		case <-timeout:
-			return fmt.Errorf("timed out waiting for controller main server port %d to open", port)
-		case <-ticker.C:
-			addr := fmt.Sprintf("127.0.0.1:%d", port)
-			conn, err := net.DialTimeout("tcp", addr, 5*ShortTimeInterval)
-			if err == nil {
-				_ = conn.Close()
-
-				return nil
-			}
-		}
-	}
 }
 
 // GoldenRule defines the structure of a golden rule for testing metric generation.
@@ -213,14 +191,14 @@ func (f *Framework) waitForControllerReady() error {
 type GoldenRule struct {
 	Name        string                     `yaml:"name"`
 	Description string                     `yaml:"description"`
-	In          *unstructured.Unstructured `yaml:"in"` // In is resource-agnostic to accomadate for any future resources introduced in RSM.
+	In          *unstructured.Unstructured `yaml:"in"` // In is resource-agnostic to accommodate for any future resources introduced in RSM.
 	Out         struct {
 		Metrics []string `yaml:"metrics"`
 	} `yaml:"out"`
 }
 
 // GoldenRuleFromYAML loads a golden rule from a YAML file.
-func GoldenRuleFromYAML(ctx context.Context, path string) (*GoldenRule, error) {
+func GoldenRuleFromYAML(_ context.Context, path string) (*GoldenRule, error) {
 	data, err := os.ReadFile(ensureSafePath(path))
 	if err != nil {
 		return nil, fmt.Errorf("failed to read YAML file %s: %w", path, err)
@@ -359,6 +337,7 @@ func (f *Framework) GetIndexedCRDs() []*apiextensionsv1.CustomResourceDefinition
 			crds = append(crds, crd)
 		}
 	}
+
 	return crds
 }
 
@@ -396,6 +375,32 @@ func (f *Framework) ToUnstructured(o runtime.Object) (*unstructured.Unstructured
 // FromUnstructured converts an unstructured.Unstructured back to a runtime.Object (populates the supplied object).
 func (f *Framework) FromUnstructured(u *unstructured.Unstructured, o runtime.Object) error {
 	return runtime.DefaultUnstructuredConverter.FromUnstructured(u.Object, o)
+}
+
+// waitForControllerReady waits for the controller to be ready.
+func (f *Framework) waitForControllerReady(ctx context.Context) error {
+	timeout := time.After(10 * time.Second)
+	ticker := time.NewTicker(ShortTimeInterval)
+	defer ticker.Stop()
+
+	for {
+		port := *f.Options.MainPort
+		select {
+		case <-timeout:
+			return fmt.Errorf("timed out waiting for controller main server port %d to open", port)
+		case <-ticker.C:
+			dialer := net.Dialer{
+				Timeout: ShortTimeInterval,
+			}
+			addr := fmt.Sprintf("127.0.0.1:%d", port)
+			conn, err := dialer.DialContext(ctx, "tcp", addr)
+			if err == nil {
+				_ = conn.Close()
+
+				return nil
+			}
+		}
+	}
 }
 
 // waitForCRDIndexed waits for a CRD to appear in the informer index.

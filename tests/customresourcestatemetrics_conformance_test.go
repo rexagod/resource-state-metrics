@@ -39,7 +39,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -54,6 +53,7 @@ import (
 
 // TestCustomResourceStateMetricsConformance tests all golden rules for all resolvers.
 func TestCustomResourceStateMetricsConformance(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 
 	// Pre-load RMMs from golden rules to work around the fact that fake clients
@@ -66,7 +66,7 @@ func TestCustomResourceStateMetricsConformance(t *testing.T) {
 
 	f := framework.NewInforming(ctx, initialRMMs...)
 
-	if err := applyCRDManifests(t, ctx, f); err != nil {
+	if err := applyCRDManifests(ctx, t, f); err != nil {
 		t.Fatalf("Failed to apply CRD manifests: %v", err)
 	}
 
@@ -98,7 +98,7 @@ func TestCustomResourceStateMetricsConformance(t *testing.T) {
 
 	f.WithDynamicClient(gvrToKindListMap)
 
-	if err := applyCRManifests(t, ctx, f); err != nil {
+	if err := applyCRManifests(ctx, t, f); err != nil {
 		t.Fatalf("Failed to apply CR manifests: %v", err)
 	}
 
@@ -110,13 +110,15 @@ func TestCustomResourceStateMetricsConformance(t *testing.T) {
 		internal.ResolverTypeUnstructured,
 	} {
 		t.Run(string(resolverType), func(t *testing.T) {
-			testResolverConformance(t, ctx, f, resolverType)
+			t.Parallel()
+			testResolverConformance(ctx, t, f, resolverType)
 		})
 	}
 }
 
 // getCRDandNonCRDManifests retrieves all CRD and non-CRD manifest file paths from the specified directories.
 func getCRDandNonCRDManifests(t *testing.T) ([]string, []string, error) {
+	t.Helper()
 	manifestDirs := []string{
 		"manifests",
 		"../manifests",
@@ -170,7 +172,8 @@ func getCRDandNonCRDManifests(t *testing.T) ([]string, []string, error) {
 }
 
 // applyCRDManifests applies only CRD manifests from the manifest directories.
-func applyCRDManifests(t *testing.T, ctx context.Context, f *framework.Framework) error {
+func applyCRDManifests(ctx context.Context, t *testing.T, f *framework.Framework) error {
+	t.Helper()
 	crdFiles, _, err := getCRDandNonCRDManifests(t)
 	if err != nil {
 		return fmt.Errorf("failed to get manifest files: %w", err)
@@ -186,7 +189,8 @@ func applyCRDManifests(t *testing.T, ctx context.Context, f *framework.Framework
 }
 
 // applyCRManifests applies only CR manifests (non-CRD) from the manifest directories.
-func applyCRManifests(t *testing.T, ctx context.Context, f *framework.Framework) error {
+func applyCRManifests(ctx context.Context, t *testing.T, f *framework.Framework) error {
+	t.Helper()
 	_, otherFiles, err := getCRDandNonCRDManifests(t)
 	if err != nil {
 		return fmt.Errorf("failed to get manifest files: %w", err)
@@ -202,24 +206,27 @@ func applyCRManifests(t *testing.T, ctx context.Context, f *framework.Framework)
 }
 
 // testResolverConformance tests all golden rules for a specific resolver.
-func testResolverConformance(t *testing.T, ctx context.Context, f *framework.Framework, resolverType internal.ResolverType) {
+func testResolverConformance(ctx context.Context, t *testing.T, f *framework.Framework, resolverType internal.ResolverType) {
+	t.Helper()
 	files := framework.GetConformanceGoldenRuleFiles([]internal.ResolverType{resolverType})
 
 	if len(files) == 0 {
 		t.Fatalf("No golden rule files found")
+
 		return
 	}
 
 	for _, file := range files {
 		testName := strings.TrimSuffix(filepath.Base(file), ".yaml")
 		t.Run(testName, func(t *testing.T) {
-			testGoldenRule(t, ctx, f, file)
+			testGoldenRule(ctx, t, f, file)
 		})
 	}
 }
 
 // testGoldenRule tests a single golden rule file.
-func testGoldenRule(t *testing.T, ctx context.Context, f *framework.Framework, filePath string) {
+func testGoldenRule(ctx context.Context, t *testing.T, f *framework.Framework, filePath string) {
+	t.Helper()
 	goldenRule, err := framework.GoldenRuleFromYAML(ctx, filePath)
 	if err != nil {
 		t.Fatalf("Failed to load golden rule from %s: %v", filePath, err)
@@ -227,6 +234,7 @@ func testGoldenRule(t *testing.T, ctx context.Context, f *framework.Framework, f
 
 	if goldenRule.In == nil {
 		t.Skipf("Golden rule has no input resource defined, skipping")
+
 		return
 	}
 
@@ -246,28 +254,13 @@ func testGoldenRule(t *testing.T, ctx context.Context, f *framework.Framework, f
 		panic("Golden rule has no expected output metrics defined")
 	}
 
-	// Extract metric names for filtering
-	// TODO
-	var metricNames []string
-	for _, line := range goldenRuleOutMetrics {
-		if strings.HasPrefix(line, "# ") {
-			continue
-		}
-		parts := strings.SplitN(line, "{", 2)
-		if len(parts) > 0 {
-			metricName := strings.TrimSpace(parts[0])
-			if metricName != "" && !slices.Contains(metricNames, metricName) {
-				metricNames = append(metricNames, metricName)
-			}
-		}
-	}
-
 	expectedMetrics := strings.Join(goldenRuleOutMetrics, "\n") + "\n"
 	port := *f.Options.MainPort
 	url := fmt.Sprintf("http://127.0.0.1:%d/metrics", port)
 
-	if err := testutil.ScrapeAndCompare(url, strings.NewReader(expectedMetrics), metricNames...); err != nil {
+	if err := testutil.ScrapeAndCompare(url, strings.NewReader(expectedMetrics)); err != nil {
 		t.Errorf("Metric comparison failed: %v", err)
+
 		return
 	}
 }

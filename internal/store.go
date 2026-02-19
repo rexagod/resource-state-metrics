@@ -108,6 +108,7 @@ func (s *StoreType) Replace(items []interface{}, _ string) error {
 			s.logger.Error(err, "failed to add item during replace")
 		}
 	}
+
 	return nil
 }
 

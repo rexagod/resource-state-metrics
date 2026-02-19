@@ -1,21 +1,97 @@
-# Reference: https://github.com/golangci/golangci-lint/blob/master/.golangci.reference.yml
-run:
-  timeout: 3m
-
-issues:
-  exclude-files:
-    - pkg/apis/resourcestatemetrics/register.go
-    - pkg/apis/resourcestatemetrics/v1alpha1/register.go
-  exclude-rules:
-    - path: _test\.go
-      linters:
-        - lll
-    - path: ^tests/.*
-      linters:
-        - varnamelen
-      text: "variable name 'f' is too short for the scope of its usage"
-
+version: "2"
 linters:
+  enable:
+    - asasalint
+    - asciicheck
+    - bidichk
+    - bodyclose
+    - canonicalheader
+    - containedctx
+    - contextcheck
+    - copyloopvar
+    - cyclop
+    - decorder
+    - depguard
+    - dogsled
+    - dupword
+    - durationcheck
+    - errchkjson
+    - errname
+    - errorlint
+    - exhaustive
+    - exptostd
+    - fatcontext
+    - forbidigo
+    - forcetypeassert
+    - funcorder
+    - funlen
+    - ginkgolinter
+    - gocheckcompilerdirectives
+    - gochecknoinits
+    - gochecksumtype
+    - gocognit
+    - goconst
+    - gocritic
+    - gocyclo
+    - godot
+    - godox
+    - goheader
+    - gomoddirectives
+    - gomodguard
+    - goprintffuncname
+    - gosec
+    - gosmopolitan
+    - grouper
+    - iface
+    - importas
+    - inamedparam
+    - interfacebloat
+    - intrange
+    - lll
+    - loggercheck
+    - maintidx
+    - makezero
+    - mirror
+    - misspell
+    - musttag
+    - nakedret
+    - nestif
+    - nilerr
+    - nilnesserr
+    - nilnil
+    - nlreturn
+    - noctx
+    - nolintlint
+    - nonamedreturns
+    - nosprintfhostport
+    - paralleltest
+    - perfsprint
+    - prealloc
+    - predeclared
+    - promlinter
+    - protogetter
+    - reassign
+    - recvcheck
+    - revive
+    - rowserrcheck
+    - sloglint
+    - spancheck
+    - sqlclosecheck
+    - staticcheck
+    - tagalign
+    - tagliatelle
+    - testableexamples
+    - testifylint
+    - thelper
+    - tparallel
+    - unconvert
+    - unparam
+    - usestdlibvars
+    - usetesting
+    - varnamelen
+    - wastedassign
+    - whitespace
+    - zerologlint
   disable:
     - dupl
     - err113
@@ -26,40 +102,64 @@ linters:
     - testpackage
     - wrapcheck
     - wsl
-  presets:
-    - bugs
-    - comment
-    - complexity
-    - error
-    - import
-    - metalinter
-    - module
-    - performance
-    - style
-    - test
-    - unused
-
-linters-settings:
-  cyclop:
-    max-complexity: 12 # FYI: Go Report Card warns on functions with cyclomatic complexity > 15.
-  depguard:
+  settings:
+    cyclop:
+      max-complexity: 12
+    depguard:
+      rules:
+        main:
+          deny:
+            - pkg: github.com/pkg/errors
+              desc: Use 'errors' or 'fmt' instead.
+            - pkg: golang.org/x/exp/slices
+              desc: Use 'slices' instead.
+    funlen:
+      lines: -1
+      statements: 85
+    lll:
+      line-length: 200
+    perfsprint:
+      strconcat: false
+    varnamelen:
+      max-distance: 20
+      check-receiver: false
+      ignore-type-assert-ok: true
+      ignore-map-index-ok: true
+      ignore-chan-recv-ok: true
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
     rules:
-      main:
-        deny:
-          - pkg: "github.com/pkg/errors"
-            desc: "Use 'errors' or 'fmt' instead."
-          - pkg: "golang.org/x/exp/slices"
-            desc: "Use 'slices' instead."
-  funlen:
-    lines: -1
-    statements: 85
-  lll:
-    line-length: 200
-  perfsprint:
-    strconcat: false
-  varnamelen:
-    max-distance: 20
-    check-receiver: false
-    ignore-type-assert-ok: true
-    ignore-map-index-ok: true
-    ignore-chan-recv-ok: true
+      - linters:
+          - lll
+        path: _test\.go
+      - linters:
+          - varnamelen
+        path: ^tests/.*
+        text: (variable|parameter) name 'f' is too short for the scope of its usage
+      - linters:
+          - revive
+        path: internal/version/version\.go
+        text: var-naming.*avoid package names that conflict with Go standard library
+    paths:
+      - pkg/apis/resourcestatemetrics/register.go
+      - pkg/apis/resourcestatemetrics/v1alpha1/register.go
+      - third_party$
+      - builtin$
+      - examples$
+formatters:
+  enable:
+    - gci
+    - goimports
+  exclusions:
+    generated: lax
+    paths:
+      - pkg/apis/resourcestatemetrics/register.go
+      - pkg/apis/resourcestatemetrics/v1alpha1/register.go
+      - third_party$
+      - builtin$
+      - examples$

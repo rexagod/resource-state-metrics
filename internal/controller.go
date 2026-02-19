@@ -106,52 +106,6 @@ func NewController(ctx context.Context, options *Options, kubeClientset kubernet
 	return controller
 }
 
-func (c *Controller) registerEventHandlers(logger klog.Logger) {
-	_, err := c.rsmInformerFactory.ResourceStateMetrics().V1alpha1().ResourceMetricsMonitors().Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
-		AddFunc:    func(obj interface{}) { c.enqueue(obj, addEvent) },
-		UpdateFunc: c.updateHandler(logger),
-		DeleteFunc: func(obj interface{}) { c.enqueue(obj, deleteEvent) },
-	})
-	if err != nil {
-		logger.Error(err, "error setting up event handlers")
-		klog.FlushAndExit(klog.ExitFlushTimeout, 1)
-	}
-}
-
-func (c *Controller) updateHandler(logger klog.Logger) func(interface{}, interface{}) {
-	return func(oldI, newI interface{}) {
-		oldResource, ok := oldI.(*v1alpha1.ResourceMetricsMonitor)
-		if !ok {
-			logger.Error(stderrors.New("failed to cast old object to ResourceMetricsMonitor"), "cannot handle update event")
-
-			return
-		}
-		newResource, ok := newI.(*v1alpha1.ResourceMetricsMonitor)
-		if !ok {
-			logger.Error(stderrors.New("failed to cast new object to ResourceMetricsMonitor"), "cannot handle update event")
-
-			return
-		}
-		if oldResource.ResourceVersion == newResource.ResourceVersion || reflect.DeepEqual(oldResource.Spec, newResource.Spec) {
-			logger.V(10).Info("Skipping event", "[-old +new]", cmp.Diff(oldResource, newResource))
-
-			return
-		}
-		logger.V(4).Info("Update event", "[-old +new]", cmp.Diff(oldResource.Spec.Configuration, newResource.Spec.Configuration))
-		c.enqueue(newI, updateEvent)
-	}
-}
-
-func (c *Controller) enqueue(obj interface{}, event eventType) {
-	key, err := cache.MetaNamespaceKeyFunc(obj)
-	if err != nil {
-		utilruntime.HandleError(err)
-
-		return
-	}
-	c.workqueue.Add([2]string{key, event.String()})
-}
-
 // Run starts the controller and blocks until the context is cancelled.
 func (c *Controller) Run(ctx context.Context, workers int) error {
 	defer utilruntime.HandleCrash()
@@ -242,6 +196,52 @@ func (c *Controller) Run(ctx context.Context, workers int) error {
 	}
 
 	return nil
+}
+
+func (c *Controller) registerEventHandlers(logger klog.Logger) {
+	_, err := c.rsmInformerFactory.ResourceStateMetrics().V1alpha1().ResourceMetricsMonitors().Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
+		AddFunc:    func(obj interface{}) { c.enqueue(obj, addEvent) },
+		UpdateFunc: c.updateHandler(logger),
+		DeleteFunc: func(obj interface{}) { c.enqueue(obj, deleteEvent) },
+	})
+	if err != nil {
+		logger.Error(err, "error setting up event handlers")
+		klog.FlushAndExit(klog.ExitFlushTimeout, 1)
+	}
+}
+
+func (c *Controller) updateHandler(logger klog.Logger) func(interface{}, interface{}) {
+	return func(oldI, newI interface{}) {
+		oldResource, ok := oldI.(*v1alpha1.ResourceMetricsMonitor)
+		if !ok {
+			logger.Error(stderrors.New("failed to cast old object to ResourceMetricsMonitor"), "cannot handle update event")
+
+			return
+		}
+		newResource, ok := newI.(*v1alpha1.ResourceMetricsMonitor)
+		if !ok {
+			logger.Error(stderrors.New("failed to cast new object to ResourceMetricsMonitor"), "cannot handle update event")
+
+			return
+		}
+		if oldResource.ResourceVersion == newResource.ResourceVersion || reflect.DeepEqual(oldResource.Spec, newResource.Spec) {
+			logger.V(10).Info("Skipping event", "[-old +new]", cmp.Diff(oldResource, newResource))
+
+			return
+		}
+		logger.V(4).Info("Update event", "[-old +new]", cmp.Diff(oldResource.Spec.Configuration, newResource.Spec.Configuration))
+		c.enqueue(newI, updateEvent)
+	}
+}
+
+func (c *Controller) enqueue(obj interface{}, event eventType) {
+	key, err := cache.MetaNamespaceKeyFunc(obj)
+	if err != nil {
+		utilruntime.HandleError(err)
+
+		return
+	}
+	c.workqueue.Add([2]string{key, event.String()})
 }
 
 func (c *Controller) processNextWorkItem(ctx context.Context) bool {
