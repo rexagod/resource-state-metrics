@@ -89,7 +89,7 @@ type Controller struct {
 	rsmClientset             clientset.Interface
 	dynamicClientset         dynamic.Interface
 	resourceDiscovery        ResourceDiscovery
-	rsmInformerFactory       informers.SharedInformerFactory
+	rsmInformerFactories     []informers.SharedInformerFactory
 	workqueue                workqueue.TypedRateLimitingInterface[[2]string]
 	recorder                 record.EventRecorder
 	stores                   sync.Map
@@ -127,15 +127,30 @@ func NewController(
 		&workqueue.TypedBucketRateLimiter[[2]string]{Limiter: rate.NewLimiter(rate.Limit(rateLimiterQPS), rateLimiterBurst)},
 	)
 
+	var rsmFactories []informers.SharedInformerFactory
+	if options.WatchesNamespaces == nil {
+		rsmFactories = append(rsmFactories, informers.NewSharedInformerFactory(rsmClientset, 0))
+	} else {
+		for _, namespace := range options.WatchesNamespaces {
+			logger.V(1).Info("Watching specific namespace", "namespace", namespace)
+			rsmFactories = append(rsmFactories,
+				informers.NewSharedInformerFactoryWithOptions(
+					rsmClientset,
+					0,
+					informers.WithNamespace(namespace),
+				))
+		}
+	}
+
 	controller := &Controller{
-		kubeclientset:      kubeClientset,
-		rsmClientset:       rsmClientset,
-		dynamicClientset:   dynamicClientset,
-		resourceDiscovery:  NewResourceDiscovery(discoveryClient, logger),
-		rsmInformerFactory: informers.NewSharedInformerFactory(rsmClientset, 0),
-		workqueue:          workqueue.NewTypedRateLimitingQueue[[2]string](ratelimiter),
-		recorder:           recorder,
-		options:            options,
+		kubeclientset:        kubeClientset,
+		rsmClientset:         rsmClientset,
+		dynamicClientset:     dynamicClientset,
+		resourceDiscovery:    NewResourceDiscovery(discoveryClient, logger),
+		rsmInformerFactories: rsmFactories,
+		workqueue:            workqueue.NewTypedRateLimitingQueue[[2]string](ratelimiter),
+		recorder:             recorder,
+		options:              options,
 		globalCardinalityManager: NewGlobalCardinalityManager(
 			*options.GlobalCardinalityLimit,
 			*options.ResourceCardinalityDefault,
@@ -159,10 +174,15 @@ func (c *Controller) Run(ctx context.Context, workers int) error {
 	logger.V(1).Info("Starting controller")
 	logger.V(4).Info("Waiting for informer caches to sync")
 
-	c.rsmInformerFactory.Start(ctx.Done())
+	for i, factory := range c.rsmInformerFactories {
+		logger.V(2).Info("Starting factory cache synchronization", "factoryIndex", i)
+		factory.Start(ctx.Done())
+	}
 
-	if ok := cache.WaitForCacheSync(ctx.Done(), c.rsmInformerFactory.ResourceStateMetrics().V1alpha1().ResourceMetricsMonitors().Informer().HasSynced); !ok {
-		return stderrors.New("failed to wait for caches to sync")
+	for _, factory := range c.rsmInformerFactories {
+		if ok := cache.WaitForCacheSync(ctx.Done(), factory.ResourceStateMetrics().V1alpha1().ResourceMetricsMonitors().Informer().HasSynced); !ok {
+			return stderrors.New("failed to wait for caches to sync")
+		}
 	}
 
 	registry := prometheus.NewRegistry()
@@ -309,14 +329,16 @@ func (c *Controller) Run(ctx context.Context, workers int) error {
 }
 
 func (c *Controller) registerEventHandlers(logger klog.Logger) {
-	_, err := c.rsmInformerFactory.ResourceStateMetrics().V1alpha1().ResourceMetricsMonitors().Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
-		AddFunc:    func(obj interface{}) { c.enqueue(obj, addEvent) },
-		UpdateFunc: c.updateHandler(logger),
-		DeleteFunc: func(obj interface{}) { c.enqueue(obj, deleteEvent) },
-	})
-	if err != nil {
-		logger.Error(err, "error setting up event handlers")
-		klog.FlushAndExit(klog.ExitFlushTimeout, 1)
+	for _, factory := range c.rsmInformerFactories {
+		_, err := factory.ResourceStateMetrics().V1alpha1().ResourceMetricsMonitors().Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
+			AddFunc:    func(obj interface{}) { c.enqueue(obj, addEvent) },
+			UpdateFunc: c.updateHandler(logger),
+			DeleteFunc: func(obj interface{}) { c.enqueue(obj, deleteEvent) },
+		})
+		if err != nil {
+			logger.Error(err, "error setting up event handlers")
+			klog.FlushAndExit(klog.ExitFlushTimeout, 1)
+		}
 	}
 }
 
@@ -403,17 +425,29 @@ func (c *Controller) syncHandler(ctx context.Context, key string, event string) 
 		return nil
 	}
 
-	resource, err := c.rsmInformerFactory.ResourceStateMetrics().V1alpha1().ResourceMetricsMonitors().Lister().ResourceMetricsMonitors(namespace).Get(name)
-	if err != nil && !errors.IsNotFound(err) {
-		return fmt.Errorf("error getting ResourceMetricsMonitor %q: %w", klog.KRef(namespace, name), err)
+	var resources []*v1alpha1.ResourceMetricsMonitor
+
+	for _, factory := range c.rsmInformerFactories {
+		resource, err := factory.ResourceStateMetrics().V1alpha1().ResourceMetricsMonitors().Lister().ResourceMetricsMonitors(namespace).Get(name)
+		if err != nil && !errors.IsNotFound(err) {
+			return fmt.Errorf("error getting ResourceMetricsMonitor %q: %w", klog.KRef(namespace, name), err)
+		}
+
+		if errors.IsNotFound(err) {
+			resource = &v1alpha1.ResourceMetricsMonitor{}
+			resource.SetName(name)
+		}
+
+		resources = append(resources, resource)
 	}
 
-	if errors.IsNotFound(err) {
-		resource = &v1alpha1.ResourceMetricsMonitor{}
-		resource.SetName(name)
+	for _, resource := range resources {
+		if err := c.handleObject(ctx, resource, event); err != nil {
+			return fmt.Errorf("error handling object for resource: %s, %w", resource.GetName(), err)
+		}
 	}
 
-	return c.handleObject(ctx, resource, event)
+	return nil
 }
 
 func (c *Controller) handleObject(ctx context.Context, objectI interface{}, event string) error {

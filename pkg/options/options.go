@@ -48,6 +48,8 @@ var (
 	registeredStarlarkTimeout            *int
 	registeredVersion                    *bool
 	registeredWorkers                    *int
+	registeredWatchesNamespacesRaw       *string
+	registeredWatchesNamespaces          []string
 )
 
 const (
@@ -68,6 +70,7 @@ const (
 	starlarkTimeoutFlagName            = "starlark-timeout-seconds"
 	versionFlagName                    = "version"
 	workersFlagName                    = "workers"
+	watchesNamespaces                  = "watches-namespaces"
 
 	CELDefaultCostLimit               = 1e5
 	CELDefaultTimeout                 = 5
@@ -100,6 +103,7 @@ type Options struct {
 	StarlarkTimeout            *int
 	Version                    *bool
 	Workers                    *int
+	WatchesNamespaces          []string
 
 	logger klog.Logger
 }
@@ -141,8 +145,14 @@ func (o *Options) Read() {
 		registeredStarlarkTimeout = flag.Int(starlarkTimeoutFlagName, StarlarkDefaultTimeout, "Maximum time in seconds for Starlark script execution. This timeout enforces a wall-clock limit to prevent slow scripts from blocking metric generation.")
 		registeredVersion = flag.Bool(versionFlagName, false, "Print version information and quit")
 		registeredWorkers = flag.Int(workersFlagName, 2, "Number of workers processing managed resources in the workqueue.")
+		registeredWatchesNamespacesRaw = flag.String(watchesNamespaces, "", "Space-separated list of namespaces to watch")
 
 		flag.Parse()
+
+		// Parse watches-namespaces into a slice
+		if *registeredWatchesNamespacesRaw != "" {
+			registeredWatchesNamespaces = strings.Fields(*registeredWatchesNamespacesRaw)
+		}
 
 		// Respect overrides, this also helps in testing without setting the same defaults in a bunch of places.
 		flag.VisitAll(func(f *flag.Flag) {
@@ -188,6 +198,7 @@ func (o *Options) Read() {
 	o.StarlarkTimeout = registeredStarlarkTimeout
 	o.Version = registeredVersion
 	o.Workers = registeredWorkers
+	o.WatchesNamespaces = registeredWatchesNamespaces
 }
 
 func validateFlag(name, value string) error {
